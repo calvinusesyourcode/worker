@@ -2,7 +2,9 @@ const init_time = Date.now();
 
 
 import dotenv from 'dotenv';
+dotenv.config();
 import OpenAI from "openai";
+const openai = new OpenAI(process.env.OPENAI_API_KEY);
 import { customAlphabet } from "nanoid";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
@@ -14,12 +16,15 @@ import util from 'util';
 import csv from 'fast-csv';
 
 
+
+
 const feature_status = ['wishlist', 'todo', 'development', 'alpha', 'beta', 'production']
 const job_status = ['scheduled', 'running', 'ongoing', 'reoccuring', 'completed', 'failed', 'cancelled', 'paused']
 const user_file_roles = ['owner', 'admin', 'editor', 'viewer']
 
-dotenv.config();
-const openai = new OpenAI(process.env.OPENAI_API_KEY);
+
+
+
 const db = await open({
     filename: "./saturn.db",
     driver: sqlite3.Database
@@ -27,6 +32,9 @@ const db = await open({
 
 await db.exec(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'tables.sql'), 'utf8'));
 console.log(await db.all("SELECT name, sql FROM sqlite_master WHERE type='table'"));
+
+
+
 
 /** @typedef {Object} Job
  * @property {string} id - unique identifier
@@ -51,13 +59,10 @@ console.log(await db.all("SELECT name, sql FROM sqlite_master WHERE type='table'
  * @property {Object} json - JSON data
  */
 
-
-
 /** @typedef {Object} JobRecord
  * @property {string} job_id - id of job
  * @property {string} record_id - id of record
  */
-
 
 
 
@@ -68,6 +73,8 @@ const data = {
     job_records: /** @type {JobRecord[]} */ ({}),
     threads: /** @type {any[]} */ ([]) // Define the structure for threads if needed
 };
+
+
 
 
 // sql helpers
@@ -110,6 +117,7 @@ async function punchcard(job, new_status, { type, tldr, message, json }) {
 
 
 
+
 // helpers
 function log(message) {
     console.log(message);
@@ -143,6 +151,9 @@ function generateId(prefix, length=16) {
     return [prefix, nanoid(16)].join("_");
 }
 
+
+
+
 // openai helpers
 async function waitOnRun(threadId, runId) {
     let run = (await openai.beta.threads.runs.retrieve(threadId, runId))
@@ -173,7 +184,6 @@ async function createAndRun(messages) {
     })
     return run
 }
-
 
 
 
