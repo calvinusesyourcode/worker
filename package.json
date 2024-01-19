@@ -2,13 +2,14 @@
     "type": "module",
     "scripts": {
         "dev": "node app.js",
-        "test": "node test.js"
+        "test": "node temp_test.js"
     },
     "dependencies": {
         "dotenv": "^16.3.1",
         "fast-csv": "^5.0.0",
         "nanoid": "^5.0.4",
         "openai": "^4.24.7",
+        "pg": "^8.11.3",
         "sqlite": "^5.1.1",
         "sqlite3": "^5.1.7"
     }

@@ -7,6 +7,14 @@ CREATE TABLE IF NOT EXISTS records (
     json JSON
 );
 ---table_separator---
+CREATE TABLE IF NOT EXISTS folders (
+    id TEXT PRIMARY KEY NOT NULL, --prefix with "fldr"
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    cloud BOOLEAN NOT NULL,
+    root TEXT NOT NULL -- starting point, e.g. "C:/Users/username/3D Objects" or "./"
+);
+---table_separator---
 CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "file"
     type TEXT NOT NULL,
@@ -15,14 +23,6 @@ CREATE TABLE IF NOT EXISTS files (
     folder_id TEXT NOT NULL,
     visibility TEXT NOT NULL,
     FOREIGN KEY (folder_id) REFERENCES folders(id)
-);
----table_separator---
-CREATE TABLE IF NOT EXISTS folders (
-    id TEXT PRIMARY KEY NOT NULL, --prefix with "fldr"
-    name TEXT NOT NULL,
-    type TEXT NOT NULL,
-    cloud BOOLEAN NOT NULL,
-    root TEXT NOT NULL -- starting point, e.g. "C:/Users/username/3D Objects" or "./"
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS users (
@@ -57,6 +57,30 @@ CREATE TABLE IF NOT EXISTS jobs (
     status TEXT NOT NULL,
     parent_id TEXT, -- Change to TEXT to match jobs.id
     FOREIGN KEY (parent_id) REFERENCES jobs(id)
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS variables (
+    id TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY NOT NULL
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS project_variables (
+    project_id TEXT NOT NULL,
+    variable_id TEXT NOT NULL,
+    PRIMARY KEY (project_id, variable_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (variable_id) REFERENCES variables(id)
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS actions (
+    id TEXT PRIMARY KEY NOT NULL,
+    tldr TEXT NOT NULL,
+    input JSON,
+    output JSON
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS features (
@@ -123,6 +147,14 @@ record_id TEXT NOT NULL, -- Change to TEXT to match records.id
 PRIMARY KEY (job_id, record_id),
 FOREIGN KEY (job_id) REFERENCES jobs(id),
 FOREIGN KEY (record_id) REFERENCES records(id)
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS job_goals (
+job_id TEXT NOT NULL, -- Change to TEXT to match jobs.id
+goal_id TEXT NOT NULL, -- Change to TEXT to match goals.id
+PRIMARY KEY (job_id, goal_id),
+FOREIGN KEY (job_id) REFERENCES jobs(id),
+FOREIGN KEY (goal_id) REFERENCES goals(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS file_records (
