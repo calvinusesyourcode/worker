@@ -1,8 +1,10 @@
 {
     "type": "module",
     "scripts": {
-        "dev": "node app.js",
-        "test": "node temp_test.js"
+        "main": "node app.js",
+        "setup": "node setup.js",
+        "reset": "node reset.js",
+        "test": "node test.js && node app.js"
     },
     "dependencies": {
         "dotenv": "^16.3.1",

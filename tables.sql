@@ -79,8 +79,7 @@ CREATE TABLE IF NOT EXISTS project_variables (
 CREATE TABLE IF NOT EXISTS actions (
     id TEXT PRIMARY KEY NOT NULL,
     tldr TEXT NOT NULL,
-    input JSON,
-    output JSON
+    args JSON
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS features (

@@ -2,22 +2,17 @@ const init_time = Date.now();
 
 import fs from 'fs';
 import path from 'path';
-import async from 'async';
-import url from 'url';
-import util from 'util';
-
+import child_process from 'child_process';
 import dotenv from 'dotenv';
-dotenv.config();
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
 import pg from "pg";
-const { Client } = pg;
 import csv from 'fast-csv';
-
 import { customAlphabet } from "nanoid";
 import OpenAI from "openai";
+
+dotenv.config();
+const { Client } = pg;
+const __dirname = path.resolve();
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
-const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 
 /*
  *  
@@ -45,13 +40,17 @@ const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const test = true;
 let pause = false;
 
-const db = new Client({
+
+export const db = new Client({
     host: process.env.POSTGRES_HOST,
     port: process.env.POSTGRES_PORT,
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
 }); await db.connect();
+
+const utilities = JSON.parse(fs.readFileSync(path.join(__dirname, 'tools.json'), 'utf8'))
+
 
 
 // TODO: use ai to only write these in one place, the tables.sql file
@@ -113,12 +112,16 @@ const transaction = async (task) => {
     }
 };
 async function punchcard(job, new_status, { type, tldr, message, json }) {
+    log(`   ######## PUNCHCARD ########`)
     log(`> ${job.id} :: ${job.status} => ${new_status}`)
+    log(`> ${type} :: ${tldr} :: ${message}`)
+    log(JSON.stringify(json, null, 2))
+    log(`   ###########################`)
     const record_id = generateId("txt");
     await transaction(async () => {
         if (new_status) {
             await db.query(
-                `UPDATE jobs SET status = ? WHERE id = ?`,
+                `UPDATE jobs SET status = $1 WHERE id = $2`,
                 [new_status, job.id]
             );
         };
@@ -166,12 +169,84 @@ function sleep(ms) {
 //         status: "pending",
 //     });
 // }
-function generateId(prefix, length=16) {
+export function generateId(prefix, length=16) {
     const nanoid = customAlphabet("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
     return [prefix, nanoid(16)].join("_");
 }
 
+async function handoff(function_name, kwargs) {
+    const { job, call_id } = kwargs
+    await punchcard(job, "waiting", {
+        type: "debug",
+        tldr: `${job.id} => ${call_id}`,
+        message: `${function_name}`,
+        json: {},
+    });
+    // const args = JSON.parse(call.function.arguments)
+    //                 switch (call.function.name) {
+        //                     case "create_video":
+        //                         const { project, prompt } = JSON.parse(call.function.arguments)
+        //                             // TODO: add retrying
+        //                             return
+        //                         }
+        //                         await punchcard(job, null, {
+            //                             type: "progress",
+            //                             tldr: `> ${call.function.name}`,
+            //                             message: `${project} :: ${prompt}`,
+        //                             json: {},
+        //                         });
+    switch (function_name) {
 
+        case "create_video":
+
+            const pythonFile = "C:/Users/calvi/3D Objects/pipe/main.py";
+            const { project, prompt } = kwargs;
+
+            if (!project || !prompt) {
+                await punchcard(job, null, {
+                    type: "error",
+                    tldr: `${function_name} failed`,
+                    message: `missing ${(!project && !prompt) ? "both args" ? project : "project" : "prompt" } for ${call.function.name}`,
+                    json: {},
+                });
+                return;
+            }
+
+            child_process.execSync(
+                `python "${pythonFile}" --prompt "${prompt}"`,
+                {cwd: path.dirname(pythonFile), stdio: 'inherit'},
+                (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(error);
+                        punchcard(job, null, {
+                            type: "error",
+                            tldr: `> ${call.id}`,
+                            message: `error in ${call.function.name}`,
+                            json: {},
+                        });
+                        return;
+                    }
+                    console.log(stdout);
+                    console.error(stderr);
+            });
+            break
+
+        default:
+            await punchcard(job, null, {
+                type: "error",
+                tldr: `${function_name} failed`,
+                message: `function ${function_name} not found`,
+                json: {},
+            });
+            return;
+    }
+    await punchcard(job, null, {
+        type: "debug",
+        tldr: `${function_name} completed`,
+        message: `of ${job.id} => ${call_id}`,
+        json: {},
+    });
+}
 
 
 // openai helpers
@@ -197,10 +272,13 @@ async function createThread(messages) {
 async function startRun(threadId) {
     return (await openai.beta.threads.runs.create(threadId, { assistant_id: process.env.OPENAI_ASSISTANT_ID }))
 }
-async function createAndRun(messages) {
+async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools=null, instructions=null) {
     const run = await openai.beta.threads.createAndRun({
-        assistant_id: process.env.OPENAI_ASSISTANT_ID,
+        assistant_id: asst_id,
         thread: { messages: messages },
+        model: model,
+        tools: tools,
+        instructions: instructions,
     })
     return run
 }
@@ -225,164 +303,111 @@ async function createAndRun(messages) {
 /** @param {Job} job */
 async function work(job) {
     
-    await punchcard(job, "working",
-    record={
+    await punchcard(job, "working", {
         type: "debug",
         tldr: `> ${job.id}`,
         message: `working on job:: ${job.tldr}`,
         json: {},
     });
     
-    if (job.tldr.includes("{{")) {
-        let [action, tldr] = job.tldr.split("{{")[1].split("}}");
-        let actions = (await db.query("SELECT * FROM actions")).rows.map((action) => action.tldr);
+    // if (job.tldr.includes("{{")) {
+    //     let [action, tldr] = job.tldr.split("{{")[1].split("}}");
+    //     let actions = (await db.query("SELECT * FROM actions")).rows.map((action) => action.tldr);
 
-        if (action in actions) {
-            await punchcard(job, null,
-            record={
-                type: "action_input",
-                tldr: ``,
-                message: `found action:: ${action}`,
-                json: {
-                    action: action,
-                    input: tldr,
-                },
-            });
-            await db.query(`INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)`, [
-                generateId("job"),
-                tldr,
-                "pending",
-                job.id,
-            ]); 
-        }
-    }
+    //     if (action in actions) {
+    //         await punchcard(job, null,
+    //         record={
+    //             type: "action_input",
+    //             tldr: ``,
+    //             message: `found action:: ${action}`,
+    //             json: {
+    //                 action: action,
+    //                 input: tldr,
+    //             },
+    //         });
+    //         await db.query(`INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)`, [
+    //             generateId("job"),
+    //             tldr,
+    //             "pending",
+    //             job.id,
+    //         ]); 
+    //     }
+    // }
 
     let threadId;
 
-    let prompt = `# Compute Architecture Initial Path Selection
-Return ONLY the index of the next step you select.
+    let history = (
+        await db.query(`
+            SELECT tldr, message FROM records
+            INNER JOIN job_records ON job_records.record_id = records.id
+            WHERE job_records.job_id = $1 AND type != 'debug'
+            ORDER BY datetime DESC
+            LIMIT 10
+        `, [job.id]))
+        .rows
+        .slice(0,10)
+        .map((row) => `##${row.tldr}\n${row.message}`)
 
-# History of current task:
-${
-    (await db.query(`
-        SELECT tldr, message FROM records
-        INNER JOIN job_records ON job_records.record_id = records.id
-        WHERE job_records.job_id = ?
-        LIMIT 10
-        ORDER BY datetime DESC
-    `, [job.id]))
-    .rows
-    .slice(0,10)
-    .map((record) => `##${record.tldr}\n${record.message}`).join("\n\n")
-}
+    let goals = (
+        await db.query(`
+            SELECT tldr FROM goals
+            INNER JOIN job_goals ON job_goals.goal_id = goals.id
+            WHERE job_goals.job_id = $1
+        `, [job.id]))
+        .rows
+        .map((row) => `- ${row.tldr}`)
 
-# Overarching goals:
-${
-    (await db.query(`
-        SELECT tldr FROM goals
-        INNER JOIN job_goals ON job_goals.goal_id = goals.id
-        WHERE job_goals.job_id = ?
-    `, [job.id]))
-    .rows
-    .map((record) => `- ${record.tldr}`).join("\n")
-}
+    let actions = (
+        await db.query(`
+            SELECT id, tldr FROM actions
+        `))
+        .rows
+        .map((row, i) => `${i}. ${row.id} (${row.tldr})`)
 
-# Potential next steps:
-${
-    ([
-        "Brainstorm",
-        "Create ",
-        "write",
-        "edit",
-    ])
-    .map((i, step) => `${i}. ${step}`).join("\n")
-}
+    let prompt = ""
+    prompt += `# Current job:\n${job.tldr}\n\n`
+    prompt += `${ history.length > 0 ? `# Job history:\n${history.join("\n")}\n\n` : "" }`
+    prompt += `${ goals.length > 0 ? `# Overarching goals:\n${goals.join("\n")}\n\n` : "" }`
+    prompt += `${ actions.length > 0 ? `# Actions:\n${actions.join("\n")}\n\n` : "" }`
+    prompt += `# Return value:\n`
+    prompt += `Call a function or brainstorm\n`
 
-`;
-    let run = (await createAndRun([{ role: "user", content: prompt }]))
-    do {
+    let run = (await createAndRun(
+        [{ role: "user", content: prompt }],
+        "asst_rhmXsyeXVrfisVnu34zd2AsD",
+        "gpt-4-1106-preview",
+        utilities,
+    ))
 
-        const runId = run.id
-        threadId = run.thread_id
+    const runId = run.id
+    threadId = run.thread_id
 
-        run = await waitOnRun(threadId, runId)
-        log(`>>> ${run.id} finished with status ${run.status}`)
-        let reply = await latestMessage(threadId)
-        console.log(reply)
-        
-
-    } while (true)
-}
-
-if (test) {
-
-    for (let table of fs.readFileSync(path.join(__dirname, 'tables.sql'), 'utf8').split("---table_separator---")) {
-        await db.query(`DROP TABLE IF EXISTS ${table.split("TABLE IF NOT EXISTS ")[1].split(" ")[0]} CASCADE`)
-        await db.query(table)
-        console.log(`> created table ${table.split("TABLE IF NOT EXISTS ")[1].split(" ")[0]}`)
+    console.log(threadId)
+    run = await waitOnRun(threadId, runId)
+    log(`>>> ${run.id} finished with status ${run.status}`)
+    if (run.status == "requires_action") {
+        console.log(">> requires action")
+        for (let call of run.required_action.submit_tool_outputs.tool_calls) {
+            console.log(`>> ${call.id}`)
+            console.log(JSON.stringify(call, null, 2))
+            if (call.type == "function") {
+                console.log(`calling ${call.function.name}`)
+                await handoff(call.function.name, {
+                    ...JSON.parse(call.function.arguments),
+                    job: job,
+                    call_id: call.id
+                })
+            }
+        }
     }
-    
-    await db.query("DELETE FROM jobs")
-    await db.query("DELETE FROM records")
-    await db.query("DELETE FROM projects")
-    await db.query("DELETE FROM variables")
-    await db.query("DELETE FROM actions")
 
-
-    await db.query(
-        "INSERT INTO projects (id) VALUES ($1)", [
-        "upnorth",
-    ])
-
-    await db.query(
-        "INSERT INTO variables (id, value) VALUES ($1, $2)", [
-        "ELEVENLABS-UPNORTH-JEREYMI-2",
-        "localenv",
-    ])
-
-    await db.query(
-        "INSERT INTO actions (id, tldr, input, output) VALUES ($1, $2, $3, $4)", [
-        "post_video",
-        "natural language to video",
-        JSON.stringify({
-            destinationUserAccount: "saturn",
-        }),
-        JSON.stringify({
-            fileType: "mp4",
-        }),
-    ])
-
-    await db.query(
-        "INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)", [
-        generateId("job"),
-        "write an html canvas pong game",
-        "pending",
-        null,
-    ])
-    await db.query(
-        "INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)", [
-        generateId("job"),
-        "",
-        "pending",
-        null,
-    ])
-    await db.query(
-        "INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)", [
-        generateId("job"),
-        "generate some ideas for improving my business",
-        "pending",
-        null,
-    ])
-
-    console.log(
-        (await db.query("SELECT * FROM jobs")).rows
-    )
-
-
-    console.log(Date.now() - init_time)
-
-    process.exit(0);
-
+    let reply = await latestMessage(threadId)
+    console.log(reply)
+    const messagesList = (await listMessages(threadId))["data"]
+    for (let message of messagesList) {
+        console.log(message.content)
+    }
+    return
 }
 
 /*
@@ -405,16 +430,16 @@ if (test) {
  */
 while (true) {
     log("> checking for new jobs")
-    for (let job of (await db.query("SELECT * FROM jobs").rows)) {
+    for (let job of (await db.query("SELECT * FROM jobs")).rows) {
         if (job.status == "pending" && job.parent == null) setTimeout(async () => await work(job), 100)
     }
     await logRecords();
     await sleep(10000);
 }
 
-// const threadId = "thread_6tzIb3gduz8c0qutilFu4kEI"
-// const runId = "run_hb0pVEkdDMLeSG7W9Qxl6Qu4"
+// const threadId = "thread_zj3FmE8iLJZPXS5WfRF0mA4u"
 // const messagesList = (await listMessages(threadId))["data"]
+// console.log(messagesList[0].content)
 // const messages = messagesList.sort((a, b) => a["created_at"] - b["created_at"]).map((msg) => msg["content"].map((content) => content["text"]["value"])).flat()
 // for (let message of messages) {
 //     console.log(message)

@@ -1,7 +1,7 @@
 render_video:
   inputs:
   - elevenlabs-voice-id
-  - broll-folder
+  - broll-folder-id
   - script
   outputs:
   - local video file

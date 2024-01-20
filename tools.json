@@ -1,0 +1,23 @@
+[
+    {
+        "type": "function",
+        "function": {
+            "name": "create_video",
+            "description": "natural language => video",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "project": {
+                        "type": "string",
+                        "description": "Determines which .env file to use"
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Short description about what the video is about."
+                    }
+                },
+                "required": ["project", "prompt"]
+            }
+        }
+    }
+]
