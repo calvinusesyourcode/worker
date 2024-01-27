@@ -1,20 +1,20 @@
 import fetch from 'node-fetch'
 
-async function get_instagram(access_token) {
+export async function get_instagram(access_token) {
     const endpoint = "https://graph.facebook.com/v18.0/";
     const input_data = "me/accounts?fields=instagram_business_account{id,name,username,profile_picture_url}";
     const response = await fetch(`${endpoint}${input_data}&access_token=${access_token}`);
     return response.json();
 }
 
-async function is_ig_access_token_valid(access_token) {
+export async function is_ig_access_token_valid(access_token) {
     const endpoint = `https://graph.facebook.com/v18.0/me/accounts?access_token=${access_token}`;
     const response = await fetch(endpoint);
     const jsonResponse = await response.json();
     return !jsonResponse.error;
 }
 
-async function post_image_to_instagram(access_token, ig_business_user_id, image_url, caption) {
+export async function post_image_to_instagram(access_token, ig_business_user_id, image_url, caption) {
     try {
         // Create container
         let endpoint = `https://graph.facebook.com/v18.0/${ig_business_user_id}/media`;
@@ -108,7 +108,7 @@ export async function post_reel_to_instagram(access_token, ig_business_user_id, 
     }
 }
 
-async function post_story_to_instagram(access_token, ig_business_user_id, video_url = null, image_url = null) {
+export async function post_story_to_instagram(access_token, ig_business_user_id, video_url = null, image_url = null) {
     try {
         // Create container
         let endpoint = `https://graph.facebook.com/v18.0/${ig_business_user_id}/media`;
@@ -165,21 +165,3 @@ async function post_story_to_instagram(access_token, ig_business_user_id, video_
         console.error(error);
     }
 }
-
-// (async () => {
-//     console.log(JSON.stringify(await get_instagram(),null,2));
-//     console.log(await is_ig_access_token_valid());
-//     console.log(await post_image_to_instagram(id, photo, "me after a long day at the gym"));
-//     console.log(await post_reel_to_instagram(id, , "chillin at the fitness lab"));
-//     console.log(await post_story_to_instagram(id, video));
-// })();
-
-
-// console.log((await post_image_to_instagram(
-//     "EAAFgxyAdN28BOzI99POsoMrVBsOWmpaCO0dg3WV6hZBcnIrzkxJZBUjsLbMn1A7CKuTXFZCcyZAkkyoqZBtf44scy3UHR1Xar4aoeZCXWZCEjq8GefGasdTZCc0JHGkybZAccf9lXiv20bDObEtJ0kU1rNj09InHFjoFh3BaNYL2xo3KxG8JU206BC6MPYMZBFyd3m2KrfrSOjI1UbVoEdhcD3uCsydjb5UsfHLLWJvUHiuMRq",
-//     "17841405385959097",
-//     "https://firebasestorage.googleapis.com/v0/b/up-north-789ad.appspot.com/o/choose-your-destiny-01.png?alt=media&token=64f3847d-7f12-4928-87b0-64d4d527c714",
-//     "From next week's newsletter!"
-// )))
-
-// console.log(JSON.stringify(await get_instagram("EAAFgxyAdN28BOzI99POsoMrVBsOWmpaCO0dg3WV6hZBcnIrzkxJZBUjsLbMn1A7CKuTXFZCcyZAkkyoqZBtf44scy3UHR1Xar4aoeZCXWZCEjq8GefGasdTZCc0JHGkybZAccf9lXiv20bDObEtJ0kU1rNj09InHFjoFh3BaNYL2xo3KxG8JU206BC6MPYMZBFyd3m2KrfrSOjI1UbVoEdhcD3uCsydjb5UsfHLLWJvUHiuMRq"), null, 2))
