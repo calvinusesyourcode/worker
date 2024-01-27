@@ -2,6 +2,7 @@ const init_time = Date.now();
 
 import fs from 'fs';
 import path from 'path';
+import util from 'util';
 import child_process from 'child_process';
 import dotenv from 'dotenv';
 import pg from "pg";
@@ -13,6 +14,12 @@ dotenv.config();
 const { Client } = pg;
 const __dirname = path.resolve();
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
+const exec = util.promisify(child_process.exec);
+
+import { jumpToCloud } from './_firebase.js';
+import { post_reel_to_instagram } from './_facebook.js';
+
+
 
 /*
  *  
@@ -173,7 +180,6 @@ export function generateId(prefix, length=16) {
     const nanoid = customAlphabet("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
     return [prefix, nanoid(16)].join("_");
 }
-
 async function handoff(function_name, kwargs) {
     const { job, call_id } = kwargs
     await punchcard(job, "waiting", {
@@ -211,26 +217,115 @@ async function handoff(function_name, kwargs) {
                 });
                 return;
             }
+            await work({
+                id: generateId("job"),
+                tldr: `create video for ${project} :: ${prompt}`,
+                status: "working",
+                parent_id: job.id,
+            })
 
-            child_process.execSync(
-                `python "${pythonFile}" --prompt "${prompt}"`,
-                {cwd: path.dirname(pythonFile), stdio: 'inherit'},
-                (error, stdout, stderr) => {
-                    if (error) {
-                        console.error(error);
-                        punchcard(job, null, {
-                            type: "error",
-                            tldr: `> ${call.id}`,
-                            message: `error in ${call.function.name}`,
-                            json: {},
-                        });
-                        return;
-                    }
-                    console.log(stdout);
-                    console.error(stderr);
+
+            let videoPath;
+            try {
+                const { stdout, stderr } = await exec(
+                    `python "${pythonFile}" --prompt "${prompt}"`,
+                    {cwd: path.dirname(pythonFile), stdio: 'inherit'}
+                );
+                
+                if (stdout.includes("OUTPUT==")) {
+                    console.log("OUTPUT FOUND");
+                    videoPath = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
+                }
+
+            } catch (error) {
+                console.error(error);
+                await punchcard(job, null, {
+                    type: "error",
+                    tldr: `${function_name} failed`,
+                    message: `error running ${pythonFile} --prompt "${prompt}": ${error}`,
+                    json: {},
+                });
+            }
+            console.log(`VIDEO PATH!!!!!!!!!: ${videoPath}`);
+
+            await punchcard(job, null, {
+                type: "progress",
+                tldr: `created video`,
+                message: `${project} :: ${prompt}`,
+                json: {},
             });
-            break
 
+            const videoUrl = await jumpToCloud(videoPath, null, {contentType: 'video/mp4'});
+            console.log(`VIDEO URL!!!!!!!!!: ${videoUrl}`);
+
+            break
+        
+        case "post_video":
+            let { instagram, youtube, facebook, tiktok, url, caption } = kwargs;
+            const instagram_business_id = "17841405385959097"
+            if (!url) {
+                await punchcard(job, null, {
+                    type: "error",
+                    tldr: `${function_name} failed`,
+                    message: `missing url for ${function_name}`,
+                    json: {},
+                });
+                return;
+            }
+            if (instagram) {
+                let accessToken;
+                try {
+                    const pythonFile = "C:/Users/calvi/3D Objects/gui/main.py"
+                    const { stdout, stderr } = await exec(
+                        `python "${pythonFile}"`,
+                        {cwd: path.dirname(pythonFile), stdio: 'inherit'}
+                    );
+                    if (stdout.includes("OUTPUT==")) {
+                        console.log("OUTPUT FOUND");
+                        accessToken = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
+                    }
+
+                } catch (error) {
+                    console.error(error);
+                    await punchcard(job, null, {
+                        type: "error",
+                        tldr: `${function_name} failed`,
+                        message: `error running ${pythonFile}: ${error}`,
+                        json: {},
+                    });
+                }
+                await post_reel_to_instagram(accessToken, instagram_business_id, url, caption);
+            }
+            if (youtube) {
+                if (caption.length > 40) {
+                    caption = one_shot(
+                        `Return this caption "${caption}" modified to be less than 40 characters. NOTHING ELSE. NO EXTRA SYNTAX. JUST THE UPDATED CAPTION.`,
+                        {model: "gpt-4-1106-preview", max_tokens: 30, temperature: 0.5}
+                    )
+                }
+                try {
+                    fetch(
+                        "https://script.google.com/macros/s/AKfycbyiVEZ0jRLfNLraT4E58ObHMjOL_AwbdKdHfIu_4OWIlB-ynT6U5gSQT1aBzaGfvR2y/exec",
+                        {
+                            method: "POST",
+                            body: JSON.stringify({
+                                video_url: url,
+                                short_description: caption,
+                            }),
+                        }
+                    )
+                } catch (error) {
+                    console.error(error);
+                    await punchcard(job, null, {
+                        type: "error",
+                        tldr: `${function_name} failed`,
+                        message: `error posting to youtube: ${error}`,
+                        json: {},
+                    });
+                }
+            }
+
+            break
         default:
             await punchcard(job, null, {
                 type: "error",
@@ -247,7 +342,9 @@ async function handoff(function_name, kwargs) {
         json: {},
     });
 }
-
+function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, temperature: 0.5}) {
+    return openai.chat.completions.create({ prompt: prompt, ...kwargs }).choices[0].text;
+}
 
 // openai helpers
 async function waitOnRun(threadId, runId) {
@@ -430,17 +527,40 @@ async function work(job) {
  */
 while (true) {
     log("> checking for new jobs")
-    for (let job of (await db.query("SELECT * FROM jobs")).rows) {
-        if (job.status == "pending" && job.parent == null) setTimeout(async () => await work(job), 100)
+    for (let job of (await db.query("SELECT * FROM jobs WHERE status = 'pending' AND parent IS NULL")).rows) {
+        setTimeout(async () => await work(job), 100)
     }
     await logRecords();
     await sleep(10000);
 }
 
-// const threadId = "thread_zj3FmE8iLJZPXS5WfRF0mA4u"
-// const messagesList = (await listMessages(threadId))["data"]
-// console.log(messagesList[0].content)
-// const messages = messagesList.sort((a, b) => a["created_at"] - b["created_at"]).map((msg) => msg["content"].map((content) => content["text"]["value"])).flat()
-// for (let message of messages) {
-//     console.log(message)
-// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
