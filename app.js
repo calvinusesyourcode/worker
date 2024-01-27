@@ -153,6 +153,13 @@ function log(message) {
 }
 async function logRecords() {
     const records = (await db.query('SELECT * FROM records')).rows;
+    for (let record of records) {
+        for (let key in record) {
+            if (typeof record[key] === "object") {
+                record[key] = JSON.stringify(record[key]);
+            }
+        }
+    }
     
     const csvStream = csv.format({ headers: true });
     const writableStream = fs.createWriteStream("records.csv");
