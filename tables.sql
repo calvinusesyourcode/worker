@@ -60,9 +60,11 @@ CREATE TABLE IF NOT EXISTS jobs (
     tldr TEXT NOT NULL,
     status TEXT NOT NULL,
     org_id TEXT NOT NULL,
+    project_id TEXT NOT NULL,
     parent_id TEXT,
-    FOREIGN KEY (parent_id) REFERENCES jobs(id)
-    FOREIGN KEY (org_id) REFERENCES orgs(id)
+    FOREIGN KEY (parent_id) REFERENCES jobs(id),
+    FOREIGN KEY (org_id) REFERENCES orgs(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS variables (
