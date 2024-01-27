@@ -1,18 +1,3 @@
-CREATE TABLE IF NOT EXISTS records (
-    id TEXT PRIMARY KEY NOT NULL, --prefix with "txt"
-    datetime BIGINT, -- Epoch time in milliseconds
-    type TEXT,
-    tldr TEXT,
-    message TEXT,
-    json JSON,
-    org_id TEXT,
-    project_id TEXT,
-    job_id TEXT,
-    FOREIGN KEY (org_id) REFERENCES orgs(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id),
-    FOREIGN KEY (job_id) REFERENCES jobs(id)
-);
----table_separator---
 CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "fldr"
     name TEXT NOT NULL,
@@ -57,6 +42,10 @@ CREATE TABLE IF NOT EXISTS agents (
     role TEXT NOT NULL
 );
 ---table_separator---
+CREATE TABLE IF NOT EXISTS orgs (
+    id TEXT PRIMARY KEY NOT NULL
+);
+---table_separator---
 CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "job"
     tldr TEXT NOT NULL,
@@ -81,8 +70,19 @@ CREATE TABLE IF NOT EXISTS projects (
     FOREIGN KEY (org_id) REFERENCES orgs(id)
 );
 ---table_separator---
-CREATE TABLE IF NOT EXISTS orgs (
-    id TEXT PRIMARY KEY NOT NULL
+CREATE TABLE IF NOT EXISTS records (
+    id TEXT PRIMARY KEY NOT NULL, --prefix with "txt"
+    datetime BIGINT, -- Epoch time in milliseconds
+    type TEXT,
+    tldr TEXT,
+    message TEXT,
+    json JSON,
+    org_id TEXT,
+    project_id TEXT,
+    job_id TEXT,
+    FOREIGN KEY (org_id) REFERENCES orgs(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS org_variables (

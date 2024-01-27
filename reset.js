@@ -21,9 +21,14 @@ const db = new pg.Client({
 
 const tables = fs.readFileSync(path.join(path.resolve(), 'tables.sql'), 'utf8').split("---table_separator---")
 for (let table of tables) {
-    await db.query(`DROP TABLE IF EXISTS ${table.split("TABLE IF NOT EXISTS ")[1].split(" ")[0]} CASCADE`)
+    const tablename = table.split("TABLE IF NOT EXISTS ")[1].split(" ")[0]
+    try {
+        await db.query(`DROP TABLE IF EXISTS ${tablename} CASCADE`)
+    } catch (e) {
+        console.log(`> did not drop table ${tablename}`)
+    }
     await db.query(table)
-    console.log(`> created table ${table.split("TABLE IF NOT EXISTS ")[1].split(" ")[0]}`)
+    console.log(`> created table ${tablename}`)
 }
 
 process.exit(0)
