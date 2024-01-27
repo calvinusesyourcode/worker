@@ -133,8 +133,8 @@ async function punchcard(job, new_status, { type, tldr, message, json }) {
             );
         };
         await db.query(
-            `INSERT INTO records (id, datetime, type, tldr, message, json) VALUES ($1, $2, $3, $4, $5, $6)`,
-            [record_id, Date.now(), type, tldr, message, JSON.stringify(json)]
+            `INSERT INTO records (id, datetime, type, tldr, message, json, org_id, project_id, job_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [record_id, Date.now(), type, tldr, message, JSON.stringify(json), null, null, job.id]
         );
         await db.query(
             `INSERT INTO job_records (job_id, record_id) VALUES ($1, $2)`,

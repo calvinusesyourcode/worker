@@ -7,8 +7,10 @@ CREATE TABLE IF NOT EXISTS records (
     json JSON,
     org_id TEXT,
     project_id TEXT,
+    job_id TEXT,
     FOREIGN KEY (org_id) REFERENCES orgs(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id)
+    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS folders (
