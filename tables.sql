@@ -4,7 +4,11 @@ CREATE TABLE IF NOT EXISTS records (
     type TEXT,
     tldr TEXT,
     message TEXT,
-    json JSON
+    json JSON,
+    org_id TEXT,
+    project_id TEXT,
+    FOREIGN KEY (org_id) REFERENCES orgs(id),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS folders (
@@ -55,8 +59,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "job"
     tldr TEXT NOT NULL,
     status TEXT NOT NULL,
-    parent_id TEXT, -- Change to TEXT to match jobs.id
+    org_id TEXT NOT NULL,
+    parent_id TEXT,
     FOREIGN KEY (parent_id) REFERENCES jobs(id)
+    FOREIGN KEY (org_id) REFERENCES orgs(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS variables (
@@ -65,14 +71,21 @@ CREATE TABLE IF NOT EXISTS variables (
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY NOT NULL,
+    tldr TEXT NOT NULL,
+    org_id TEXT NOT NULL,
+    FOREIGN KEY (org_id) REFERENCES orgs(id)
+);
+---table_separator---
+CREATE TABLE IF NOT EXISTS orgs (
     id TEXT PRIMARY KEY NOT NULL
 );
 ---table_separator---
-CREATE TABLE IF NOT EXISTS project_variables (
-    project_id TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS org_variables (
+    org_id TEXT NOT NULL,
     variable_id TEXT NOT NULL,
-    PRIMARY KEY (project_id, variable_id),
-    FOREIGN KEY (project_id) REFERENCES projects(id),
+    PRIMARY KEY (org_id, variable_id),
+    FOREIGN KEY (org_id) REFERENCES orgs(id),
     FOREIGN KEY (variable_id) REFERENCES variables(id)
 );
 ---table_separator---

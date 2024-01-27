@@ -7,7 +7,7 @@
             "command": "cmd",
             "args": [
                 "/c",
-                "git add . && git commit -m \"${input:commitMessage}\" && git push"
+                "git add . && git commit -m \"\\\"${input:commitMessage}\\\"\" && git push"
             ],
             "problemMatcher": [],
             "group": {
