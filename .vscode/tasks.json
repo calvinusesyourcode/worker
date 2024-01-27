@@ -1,0 +1,30 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "push",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "git add . && git commit -m \"${input:commitMessage}\" && git push"
+            ],
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "commitMessage",
+            "type": "promptString",
+            "description": "Enter commit message:"
+        }
+    ]
+}
