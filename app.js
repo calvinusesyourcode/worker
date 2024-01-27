@@ -534,7 +534,7 @@ async function work(job) {
  */
 while (true) {
     log("> checking for new jobs")
-    for (let job of (await db.query("SELECT * FROM jobs WHERE status = 'pending' AND parent IS NULL")).rows) {
+    for (let job of (await db.query("SELECT * FROM jobs WHERE status = 'pending'")).rows) {
         setTimeout(async () => await work(job), 100)
     }
     await logRecords();
