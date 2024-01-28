@@ -40,7 +40,11 @@ import { post_reel_to_instagram } from './_facebook.js';
 *        ░        ░ ░     ░     ░  ░      ░  ░   ░     
 * 
 * 
-*      v0.0.22--broken
+*       v0.0.22--broken
+*        
+*       CHANGELOG:
+*       - imports :: pg => pgPromise
+* 
 * 
 * 
 */
