@@ -40,7 +40,7 @@ import { post_reel_to_instagram } from './_facebook.js';
 *        ░        ░ ░     ░     ░  ░      ░  ░   ░     
 * 
 * 
-*      v0.0.1--broken
+*      v0.0.22--broken
 * 
 * 
 */
@@ -48,15 +48,6 @@ import { post_reel_to_instagram } from './_facebook.js';
 dotenv.config();
 const test = true;
 let pause = false;
-
-
-// export const db2 = new Client({
-//     host: process.env.POSTGRES_HOST,
-//     port: process.env.POSTGRES_PORT,
-//     database: process.env.POSTGRES_DB,
-//     user: process.env.POSTGRES_USER,
-//     password: process.env.POSTGRES_PASSWORD,
-// }); await db.connect();
 
 export const db = pgPromise()({
     host: process.env.POSTGRES_HOST,
