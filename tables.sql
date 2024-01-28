@@ -57,7 +57,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 ---table_separator---
 CREATE TABLE IF NOT EXISTS variables (
     id TEXT PRIMARY KEY NOT NULL,
-    value TEXT NOT NULL
+    org_id TEXT NOT NULL,
+    value TEXT NOT NULL,
+    FOREIGN KEY (org_id) REFERENCES orgs(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS records (
@@ -73,14 +75,6 @@ CREATE TABLE IF NOT EXISTS records (
     FOREIGN KEY (org_id) REFERENCES orgs(id),
     FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id),
     FOREIGN KEY (job_id) REFERENCES jobs(id)
-);
----table_separator---
-CREATE TABLE IF NOT EXISTS org_variables (
-    org_id TEXT NOT NULL,
-    variable_id TEXT NOT NULL,
-    PRIMARY KEY (org_id, variable_id),
-    FOREIGN KEY (org_id) REFERENCES orgs(id),
-    FOREIGN KEY (variable_id) REFERENCES variables(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS actions (
