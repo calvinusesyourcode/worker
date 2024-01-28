@@ -3,16 +3,17 @@ const init_time = Date.now();
 import fs from 'fs';
 import path from 'path';
 import util from 'util';
+import url from 'url';
 import child_process from 'child_process';
 import dotenv from 'dotenv';
 import pg from "pg";
+import pgPromise from 'pg-promise';
 import csv from 'fast-csv';
 import { customAlphabet } from "nanoid";
 import OpenAI from "openai";
 
-dotenv.config();
-const { Client } = pg;
-const __dirname = path.resolve();
+const __filename = url.fileURLToPath(new URL(import.meta.url));
+const __dirname = path.dirname(__filename);
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 const exec = util.promisify(child_process.exec);
 
@@ -22,39 +23,48 @@ import { post_reel_to_instagram } from './_facebook.js';
 
 
 /*
- *  
- *      A distant planet beckons you... 
- * 
- *      Find the future and yourself....
- * 
- * 
- *     █     █░ ▒█████   ██▀███   ██ ▄█▀▓█████  ██▀███  
- *    ▓█░ █ ░█░▒██▒  ██▒▓██ ▒ ██▒ ██▄█▒ ▓█   ▀ ▓██ ▒ ██▒
- *    ▒█░ █ ░█ ▒██░  ██▒▓██ ░▄█ ▒▓███▄░ ▒███   ▓██ ░▄█ ▒
- *    ░█░ █ ░█ ▒██   ██░▒██▀▀█▄  ▓██ █▄ ▒▓█  ▄ ▒██▀▀█▄  
- *    ░░██▒██▓ ░ ████▓▒░░██▓ ▒██▒▒██▒ █▄░▒████▒░██▓ ▒██▒
- *    ░ ▓░▒ ▒  ░ ▒░▒░▒░ ░ ▒▓ ░▒▓░▒ ▒▒ ▓▒░░ ▒░ ░░ ▒▓ ░▒▓░
- *      ▒ ░ ░    ░ ▒ ▒░   ░▒ ░ ▒░░ ░▒ ▒░ ░ ░  ░  ░▒ ░ ▒░
- *      ░   ░  ░ ░ ░ ▒    ░░   ░ ░ ░░ ░    ░     ░░   ░ 
- *        ░        ░ ░     ░     ░  ░      ░  ░   ░     
- * 
- * 
- *      v0.0.1--broken
- * 
- * 
+*  
+*      A distant planet beckons you... 
+* 
+*      Find the future and yourself..
+* 
+* 
+*     █     █░ ▒█████   ██▀███   ██ ▄█▀▓█████  ██▀███  
+*    ▓█░ █ ░█░▒██▒  ██▒▓██ ▒ ██▒ ██▄█▒ ▓█   ▀ ▓██ ▒ ██▒
+*    ▒█░ █ ░█ ▒██░  ██▒▓██ ░▄█ ▒▓███▄░ ▒███   ▓██ ░▄█ ▒
+*    ░█░ █ ░█ ▒██   ██░▒██▀▀█▄  ▓██ █▄ ▒▓█  ▄ ▒██▀▀█▄  
+*    ░░██▒██▓ ░ ████▓▒░░██▓ ▒██▒▒██▒ █▄░▒████▒░██▓ ▒██▒
+*    ░ ▓░▒ ▒  ░ ▒░▒░▒░ ░ ▒▓ ░▒▓░▒ ▒▒ ▓▒░░ ▒░ ░░ ▒▓ ░▒▓░
+*      ▒ ░ ░    ░ ▒ ▒░   ░▒ ░ ▒░░ ░▒ ▒░ ░ ░  ░  ░▒ ░ ▒░
+*      ░   ░  ░ ░ ░ ▒    ░░   ░ ░ ░░ ░    ░     ░░   ░ 
+*        ░        ░ ░     ░     ░  ░      ░  ░   ░     
+* 
+* 
+*      v0.0.1--broken
+* 
+* 
 */
 
+dotenv.config();
 const test = true;
 let pause = false;
 
 
-export const db = new Client({
+// export const db2 = new Client({
+//     host: process.env.POSTGRES_HOST,
+//     port: process.env.POSTGRES_PORT,
+//     database: process.env.POSTGRES_DB,
+//     user: process.env.POSTGRES_USER,
+//     password: process.env.POSTGRES_PASSWORD,
+// }); await db.connect();
+
+export const db = pgPromise()({
     host: process.env.POSTGRES_HOST,
     port: process.env.POSTGRES_PORT,
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
-}); await db.connect();
+});
 
 const utilities = JSON.parse(fs.readFileSync(path.join(__dirname, 'tools.json'), 'utf8'))
 
@@ -108,16 +118,6 @@ const data = {
 
 
 // sql helpers
-const transaction = async (task) => {
-    await db.query('BEGIN');
-    try {
-        await task();
-        await db.query('COMMIT');
-    } catch (error) {
-        await db.query('ROLLBACK');
-        throw (error);
-    }
-};
 async function punchcard(job, new_status, { type, tldr, message, json }) {
     log(`   ######## PUNCHCARD ########`)
     log(`> ${job.id} :: ${job.status} => ${new_status}`)
@@ -125,21 +125,17 @@ async function punchcard(job, new_status, { type, tldr, message, json }) {
     log(JSON.stringify(json, null, 2))
     log(`   ###########################`)
     const record_id = generateId("txt");
-    await transaction(async () => {
+    await db.tx(async t => {
+        await t.none(
+            `INSERT INTO records (id, datetime, type, tldr, message, json, job_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [record_id, Date.now(), type, tldr, message, JSON.stringify(json), job.id]
+        );
         if (new_status) {
-            await db.query(
+            await t.none(
                 `UPDATE jobs SET status = $1 WHERE id = $2`,
                 [new_status, job.id]
             );
         };
-        await db.query(
-            `INSERT INTO records (id, datetime, type, tldr, message, json, org_id, project_id, job_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-            [record_id, Date.now(), type, tldr, message, JSON.stringify(json), null, null, job.id]
-        );
-        await db.query(
-            `INSERT INTO job_records (job_id, record_id) VALUES ($1, $2)`,
-            [job.id, record_id]
-        );
     });
     return record_id;
 }
@@ -152,7 +148,7 @@ function log(message) {
     console.log(message);
 }
 async function logRecords() {
-    const records = (await db.query('SELECT * FROM records')).rows;
+    const records = (await db.any('SELECT * FROM records'));
     for (let record of records) {
         for (let key in record) {
             if (typeof record[key] === "object") {
@@ -163,10 +159,6 @@ async function logRecords() {
     
     const csvStream = csv.format({ headers: true });
     const writableStream = fs.createWriteStream("records.csv");
-
-    // writableStream.on("finish", function(){
-    //     console.log("DONE!");
-    // });
 
     csvStream.pipe(writableStream);
     records.forEach(record => csvStream.write(record));
@@ -224,12 +216,10 @@ async function handoff(function_name, kwargs) {
                 });
                 return;
             }
-            await work({
-                id: generateId("job"),
-                tldr: `create video for ${project} :: ${prompt}`,
-                status: "working",
-                parent_id: job.id,
-            })
+            // await db.any(
+            //     `INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)`,
+            //     [generateId("job"), `create video for ${project} :: ${prompt}`, "pending", job.id]
+            // );
 
 
             let videoPath;
@@ -312,7 +302,7 @@ async function handoff(function_name, kwargs) {
                 }
                 try {
                     fetch(
-                        "https://script.google.com/macros/s/AKfycbyiVEZ0jRLfNLraT4E58ObHMjOL_AwbdKdHfIu_4OWIlB-ynT6U5gSQT1aBzaGfvR2y/exec",
+                        `https://script.google.com/macros/s/${process.env.GSCRIPT_ENDPOINT}/exec`,
                         {
                             method: "POST",
                             body: JSON.stringify({
@@ -333,6 +323,7 @@ async function handoff(function_name, kwargs) {
             }
 
             break
+        
         default:
             await punchcard(job, null, {
                 type: "error",
@@ -406,66 +397,30 @@ async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools
  **/
 /** @param {Job} job */
 async function work(job) {
-    
-    await punchcard(job, "working", {
-        type: "debug",
-        tldr: `> ${job.id}`,
-        message: `working on job:: ${job.tldr}`,
-        json: {},
-    });
-    
-    // if (job.tldr.includes("{{")) {
-    //     let [action, tldr] = job.tldr.split("{{")[1].split("}}");
-    //     let actions = (await db.query("SELECT * FROM actions")).rows.map((action) => action.tldr);
-
-    //     if (action in actions) {
-    //         await punchcard(job, null,
-    //         record={
-    //             type: "action_input",
-    //             tldr: ``,
-    //             message: `found action:: ${action}`,
-    //             json: {
-    //                 action: action,
-    //                 input: tldr,
-    //             },
-    //         });
-    //         await db.query(`INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)`, [
-    //             generateId("job"),
-    //             tldr,
-    //             "pending",
-    //             job.id,
-    //         ]); 
-    //     }
-    // }
 
     let threadId;
 
-    let history = (
-        await db.query(`
+    let history = (await db.any(`
             SELECT tldr, message FROM records
             INNER JOIN job_records ON job_records.record_id = records.id
             WHERE job_records.job_id = $1 AND type != 'debug'
             ORDER BY datetime DESC
             LIMIT 10
         `, [job.id]))
-        .rows
         .slice(0,10)
         .map((row) => `##${row.tldr}\n${row.message}`)
 
-    let goals = (
-        await db.query(`
+    let goals = (await db.any(`
             SELECT tldr FROM goals
             INNER JOIN job_goals ON job_goals.goal_id = goals.id
             WHERE job_goals.job_id = $1
         `, [job.id]))
-        .rows
         .map((row) => `- ${row.tldr}`)
 
     let actions = (
-        await db.query(`
+        await db.any(`
             SELECT id, tldr FROM actions
         `))
-        .rows
         .map((row, i) => `${i}. ${row.id} (${row.tldr})`)
 
     let prompt = ""
@@ -532,15 +487,28 @@ async function work(job) {
  *
  *
  */
-while (true) {
-    log("> checking for new jobs")
-    for (let job of (await db.query("SELECT * FROM jobs WHERE status = 'pending'")).rows) {
-        setTimeout(async () => await work(job), 100)
+async function main() {
+    while (true) {
+        log("> checking for new jobs")
+        for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'pending'"))) {
+            await punchcard(job, "working", {
+                type: "debug",
+                tldr: `> ${job.id}`,
+                message: `working on job:: ${job.tldr}`,
+                json: {},
+            });
+            setTimeout(async () => await work(job), 100)
+        }
+        await logRecords();
+        await sleep(10000);
     }
-    await logRecords();
-    await sleep(10000);
 }
 
+console.log(`process.argv[0]: ${process.argv[0]}`)
+console.log(`process.argv[1]: ${process.argv[1]}`)
+if (path.basename(process.argv[1]) === path.basename(__filename)) {
+    main();
+}
 
 
 

@@ -4,19 +4,19 @@
 
 const init_time = Date.now()
 
-import pg from 'pg';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const db = new pg.Client({
+import pgPromise from 'pg-promise';
+const db = pgPromise()({
     host: process.env.POSTGRES_HOST,
     port: process.env.POSTGRES_PORT,
     database: process.env.POSTGRES_DB,
     user: process.env.POSTGRES_USER,
     password: process.env.POSTGRES_PASSWORD,
-}); await db.connect();
+});
 
 import { customAlphabet } from 'nanoid';
 export function generateId(prefix, length=16) {
@@ -27,34 +27,36 @@ export function generateId(prefix, length=16) {
 
 let pipeFolderId = generateId("folder");
 
-await db.query(
-    "INSERT INTO folders (id, name, type, cloud, root) VALUES ($1, $2, $3, $4, $5)", [
-        pipeFolderId,
-        "pipe",
-        "repo",
-        false,
-        "C:/Users/calvi/3D Objects/pipe"
-])
+await db.none(
+    `INSERT INTO folders (id, name, type, cloud, root) 
+    VALUES ($[id], $[name], $[type], $[cloud], $[root])`, {
+        id: pipeFolderId,
+        name: "pipe",
+        type: "repo",
+        cloud: false,
+        root: "C:/Users/calvi/3D Objects/pipe"
+});
 
-await db.query(
-    "INSERT INTO files (id, type, extension, basename, folder_id, visibility) VALUES ($1, $2, $3, $4, $5, $6)", [
-        "pipe",
-        "script",
-        "py",
-        "main",
-        pipeFolderId,
-        "private",
-])
+await db.none(
+    `INSERT INTO files (id, type, extension, basename, folder_id, visibility) 
+    VALUES ($[id], $[type], $[extension], $[basename], $[folder_id], $[visibility])`, {
+        id: "pipe",
+        type: "script",
+        extension: "py",
+        basename: "main",
+        folder_id: pipeFolderId,
+        visibility: "private",
+});
 
 
-// await db.query(
+// await db.none(
 //     "INSERT INTO variables (id, value) VALUES ($1, $2)", [
 //     "ELEVENLABS-UPNORTH-JEREYMI-2",
 //     "localenv",
 // ])
 
 
-// await db.query(
+// await db.none(
 //     "INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)", [
 //     generateId("job"),
 //     "create an upnorth video about fitness",
@@ -63,7 +65,7 @@ await db.query(
 // ])
 
 // console.log(
-//     (await db.query("SELECT * FROM jobs")).rows
+//     (await db.any("SELECT * FROM jobs")).rows
 // )
 
 console.log(`\n>> setup took ${Date.now() - init_time}\n`)

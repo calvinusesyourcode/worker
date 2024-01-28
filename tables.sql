@@ -22,19 +22,6 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT NOT NULL UNIQUE
 );
 ---table_separator---
-CREATE TABLE IF NOT EXISTS user_social_usernames (
-    user_id TEXT NOT NULL, -- Change to TEXT to match users.id
-    instagram TEXT,
-    twitter TEXT,
-    gmail TEXT,
-    facebook TEXT,
-    linkedin TEXT,
-    github TEXT,
-    tiktok TEXT,
-    PRIMARY KEY (user_id),
-    FOREIGN KEY (user_id) REFERENCES users(id)
-);
----table_separator---
 CREATE TABLE IF NOT EXISTS agents (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "agt"
     name TEXT NOT NULL,
@@ -46,28 +33,31 @@ CREATE TABLE IF NOT EXISTS orgs (
     id TEXT PRIMARY KEY NOT NULL
 );
 ---table_separator---
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT NOT NULL,
+    tldr TEXT NOT NULL,
+    org_id TEXT NOT NULL,
+    PRIMARY KEY (org_id, id),
+    FOREIGN KEY (org_id) REFERENCES orgs(id)
+);
+---table_separator---
 CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY NOT NULL, --prefix with "job"
     tldr TEXT NOT NULL,
     status TEXT NOT NULL,
+    start_time BIGINT,
+    end_time BIGINT,
     org_id TEXT NOT NULL,
     project_id TEXT NOT NULL,
     parent_id TEXT,
     FOREIGN KEY (parent_id) REFERENCES jobs(id),
     FOREIGN KEY (org_id) REFERENCES orgs(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id)
+    FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS variables (
     id TEXT PRIMARY KEY NOT NULL,
     value TEXT NOT NULL
-);
----table_separator---
-CREATE TABLE IF NOT EXISTS projects (
-    id TEXT PRIMARY KEY NOT NULL,
-    tldr TEXT NOT NULL,
-    org_id TEXT NOT NULL,
-    FOREIGN KEY (org_id) REFERENCES orgs(id)
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS records (
@@ -81,7 +71,7 @@ CREATE TABLE IF NOT EXISTS records (
     project_id TEXT,
     job_id TEXT,
     FOREIGN KEY (org_id) REFERENCES orgs(id),
-    FOREIGN KEY (project_id) REFERENCES projects(id),
+    FOREIGN KEY (org_id, project_id) REFERENCES projects(org_id, id),
     FOREIGN KEY (job_id) REFERENCES jobs(id)
 );
 ---table_separator---

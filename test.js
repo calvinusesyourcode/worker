@@ -4,19 +4,13 @@
 
 const init_time = Date.now()
 
-import pg from 'pg';
+import pgPromise from 'pg-promise';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 
 dotenv.config();
-const db = new pg.Client({
-    host: process.env.POSTGRES_HOST,
-    port: process.env.POSTGRES_PORT,
-    database: process.env.POSTGRES_DB,
-    user: process.env.POSTGRES_USER,
-    password: process.env.POSTGRES_PASSWORD,
-}); await db.connect();
+import { db } from './app.js';
 
 import { customAlphabet } from 'nanoid';
 export function generateId(prefix, length=16) {
@@ -24,16 +18,29 @@ export function generateId(prefix, length=16) {
     return [prefix, nanoid(16)].join("_");
 }
 
+// await db.none(`INSERT INTO orgs (id) VALUES ($1)`, [
+//     "upnorth",
+// ])
 
-await db.query(`DELETE FROM job_records`)
-await db.query(`DELETE FROM jobs`)
+// await db.none(`INSERT INTO projects (org_id, id, tldr) VALUES ($1, $2, $3)`, [
+//     "upnorth",
+//     "content",
+//     "social media videos, photos, blogs, etc"
+// ])
 
-await db.query(
-    "INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)", [
-    generateId("job"),
-    "create an upnorth video about fitness",
-    "pending",
-    null,
-])
+await db.none(`DELETE FROM job_records`)
+await db.none(`DELETE FROM records`)
+await db.none(`DELETE FROM jobs`)
+console.log("3")
+await db.none(
+    `INSERT INTO jobs (id, tldr, status, org_id, project_id) 
+    VALUES ($[id], $[tldr], $[status], $[org_id], $[project_id])`, {
+        id: generateId("job"),
+        tldr: "create an upnorth video about fitness",
+        status: "pending",
+        org_id: "upnorth",
+        project_id: "content"
+    });
+    console.log("4")
 
 process.exit(0)
