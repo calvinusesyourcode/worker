@@ -54,7 +54,8 @@ const test = true;
 let pause = false;
 
 const SUPERVISOR_SLEEP = 1000*60;
-const LOGGER_SLEEP = 1000*60*60;
+const LOGGER_SLEEP = 1000*60*60*2;
+const MANAGER_SLEEP = 1000*60*30;
 
 
 
@@ -119,11 +120,7 @@ const data = {
 
 // sql helpers
 export async function punchcard(job, new_status, { type, tldr, message, json }) {
-    log(`   ######## PUNCHCARD ########`)
-    log(`> ${job.id} :: ${job.status} => ${new_status}`)
-    log(`> ${type} :: ${tldr} :: ${message}`)
-    log(JSON.stringify(json, null, 2))
-    log(`   ###########################`)
+    log(`PUNCH :: ${job.id} :: ${job.status} => ${new_status} :: ${tldr} :: ${message} :: ${JSON.stringify(json)}`)
     const record_id = generateId("txt");
     await db.tx(async t => {
         await t.none(
@@ -237,20 +234,48 @@ async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools
 }
 
 
+
+
+
 async function supervisor() {
     while (true) {
-        log("> checking for new jobs");
-        const jobs = await db.any("SELECT * FROM jobs WHERE status = 'pending'");
-        for (let job of jobs) {
+        log("> checking for pending jobs");
+        for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'pending'"))) {
             await punchcard(job, "working", {
                 type: "debug",
                 tldr: `> ${job.id}`,
-                message: `working on job:: ${job.tldr}`,
+                message: `starting job :: ${job.tldr}`,
                 json: {},
             });
-            await work(job);
+            job.status = "working";
+            setTimeout(async () => await work(job), 100);
         }
         await sleep(SUPERVISOR_SLEEP);
+    }
+}
+async function manager() {
+    while (true) {
+        log("> checking for scheduled jobs");
+        for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'scheduled' AND start_time > $1 AND start_time < $2", [Date.now()/1000 - MANAGER_SLEEP, Date.now()/1000 + MANAGER_SLEEP]))) {
+            const wait = job.start_time - Date.now()/1000;
+            await punchcard(job, "queued", {
+                type: "debug",
+                tldr: `${job.tldr}`,
+                message: ``,
+                json: {},
+            });
+            job.status = "queued";
+            console.log(`> starting ${job.id} in ${Math.floor(wait)} seconds`);
+            setTimeout(async () => {
+                await punchcard(job, "pending", {
+                    type: "debug",
+                    tldr: `${job.tldr}`,
+                    message: ``,
+                    json: {},
+                });
+            }, wait*1000);
+        }
+        await sleep(MANAGER_SLEEP);
     }
 }
 async function logger() {
@@ -433,6 +458,9 @@ function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, t
 
 
 
+
+
+
 /*
  *
  *                                                .::            .::                               .::           .::  
@@ -552,8 +580,14 @@ async function work(job) {
  */
 async function main() {
     supervisor();
+    manager();
     logger();
 }
+
+
+
+
+
 
 
 

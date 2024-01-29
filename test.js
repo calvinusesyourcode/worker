@@ -18,28 +18,28 @@ export function generateId(prefix, length=16) {
     return [prefix, nanoid(16)].join("_");
 }
 
-// await db.none(`INSERT INTO orgs (id) VALUES ($1)`, [
-//     "upnorth",
-// ])
+await db.none(`INSERT INTO orgs (id) VALUES ($1) ON CONFLICT DO NOTHING`, [
+    "upnorth",
+])
 
-// await db.none(`INSERT INTO projects (org_id, id, tldr) VALUES ($1, $2, $3)`, [
-//     "upnorth",
-//     "content",
-//     "social media videos, photos, blogs, etc"
-// ])
+await db.none(`INSERT INTO projects (org_id, id, tldr) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`, [
+    "upnorth",
+    "content",
+    "social media videos, photos, blogs, etc"
+])
 
 await db.none(`DELETE FROM job_records`)
 await db.none(`DELETE FROM records`)
 await db.none(`DELETE FROM jobs`)
-console.log("3")
 await db.none(
-    `INSERT INTO jobs (id, tldr, status, org_id, project_id) 
-    VALUES ($[id], $[tldr], $[status], $[org_id], $[project_id])`, {
+    `INSERT INTO jobs (id, tldr, status, org_id, project_id, start_time) 
+    VALUES ($[id], $[tldr], $[status], $[org_id], $[project_id], $[start_time])`, {
         id: generateId("job"),
         tldr: "create an upnorth video about fitness",
-        status: "pending",
+        status: "scheduled",
         org_id: "upnorth",
-        project_id: "content"
+        project_id: "content",
+        start_time: Date.now()/1000 + 10,
     });
     console.log("4")
 
