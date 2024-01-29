@@ -53,6 +53,11 @@ dotenv.config();
 const test = true;
 let pause = false;
 
+const SUPERVISOR_SLEEP = 1000*60;
+const LOGGER_SLEEP = 1000*60*60;
+
+
+
 export const db = pgPromise()({
     host: process.env.POSTGRES_HOST,
     port: process.env.POSTGRES_PORT,
@@ -421,6 +426,14 @@ async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools
 /** @param {Job} job */
 async function work(job) {
 
+
+    if (job.tldr.includes(process.env.JOB_SPECIAL_PREFIX)) {
+        job.tldr = job.tldr.replace(process.env.JOB_SPECIAL_PREFIX, "")
+        
+    }
+
+
+
     let threadId;
 
     let history = (await db.any(`
@@ -511,26 +524,39 @@ async function work(job) {
  *
  */
 async function main() {
+    supervisor();
+    logger();
+}
+
+async function supervisor() {
     while (true) {
-        log("> checking for new jobs")
-        for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'pending'"))) {
+        log("> checking for new jobs");
+        const jobs = await db.any("SELECT * FROM jobs WHERE status = 'pending'");
+        for (let job of jobs) {
             await punchcard(job, "working", {
                 type: "debug",
                 tldr: `> ${job.id}`,
                 message: `working on job:: ${job.tldr}`,
                 json: {},
             });
-            setTimeout(async () => await work(job), 100)
+            await work(job);
         }
+        await sleep(SUPERVISOR_SLEEP);
+    }
+}
+
+async function logger() {
+    while (true) {
+        log("> logging records");
         await logRecords();
-        await sleep(10000);
+        await sleep(LOGGER_SLEEP);
     }
 }
 
 console.log(`process.argv[0]: ${process.argv[0]}`)
 console.log(`process.argv[1]: ${process.argv[1]}`)
 if (path.basename(process.argv[1]) === path.basename(__filename)) {
-    main();
+    main().catch(console.error);
 }
 
 
