@@ -56,9 +56,10 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 ---table_separator---
 CREATE TABLE IF NOT EXISTS variables (
-    id TEXT PRIMARY KEY NOT NULL,
+    id TEXT NOT NULL,
     org_id TEXT NOT NULL,
     value TEXT NOT NULL,
+    PRIMARY KEY (id, org_id),
     FOREIGN KEY (org_id) REFERENCES orgs(id)
 );
 ---table_separator---

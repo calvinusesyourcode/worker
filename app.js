@@ -15,7 +15,7 @@ import OpenAI from "openai";
 const __filename = url.fileURLToPath(new URL(import.meta.url));
 const __dirname = path.dirname(__filename);
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
-const exec = util.promisify(child_process.exec);
+export const exec = util.promisify(child_process.exec);
 
 import { jumpToCloud } from './_firebase.js';
 import { post_reel_to_instagram } from './_facebook.js';
@@ -113,7 +113,7 @@ const data = {
 
 
 // sql helpers
-async function punchcard(job, new_status, { type, tldr, message, json }) {
+export async function punchcard(job, new_status, { type, tldr, message, json }) {
     log(`   ######## PUNCHCARD ########`)
     log(`> ${job.id} :: ${job.status} => ${new_status}`)
     log(`> ${type} :: ${tldr} :: ${message}`)
@@ -254,7 +254,6 @@ async function handoff(function_name, kwargs) {
         
         case "post_video":
             let { instagram, youtube, facebook, tiktok, url, caption } = kwargs;
-            const instagram_business_id = "17841405385959097"
             if (!url) {
                 await punchcard(job, null, {
                     type: "error",
@@ -265,28 +264,35 @@ async function handoff(function_name, kwargs) {
                 return;
             }
             if (instagram) {
-                let accessToken;
-                try {
-                    const pythonFile = "C:/Users/calvi/3D Objects/gui/main.py"
-                    const { stdout, stderr } = await exec(
-                        `python "${pythonFile}"`,
-                        {cwd: path.dirname(pythonFile), stdio: 'inherit'}
-                    );
-                    if (stdout.includes("OUTPUT==")) {
-                        console.log("OUTPUT FOUND");
-                        accessToken = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
-                    }
 
-                } catch (error) {
-                    console.error(error);
-                    await punchcard(job, null, {
-                        type: "error",
-                        tldr: `${function_name} failed`,
-                        message: `error running ${pythonFile}: ${error}`,
-                        json: {},
-                    });
+                let accessToken = await get("instagram_access_token", "upnorth");
+                let ig_id = await get("instagram_business_account_id", "upnorth");
+                
+                if (!accessToken || !(await is_ig_access_token_valid(accessToken))) {
+                    
+                    try {
+                        const pythonFile = "C:/Users/calvi/3D Objects/gui/main.py"
+                        const { stdout, stderr } = await exec(
+                            `python "${pythonFile}"`,
+                            {cwd: path.dirname(pythonFile), stdio: 'inherit'}
+                        );
+                        if (stdout.includes("OUTPUT==")) {
+                            console.log("OUTPUT FOUND");
+                            accessToken = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
+                        }
+
+                    } catch (error) {
+                        console.error(error);
+                        await punchcard(job, null, {
+                            type: "error",
+                            tldr: `${function_name} failed`,
+                            message: `error running ${pythonFile}: ${error}`,
+                            json: {},
+                        });
+                    }
                 }
-                await post_reel_to_instagram(accessToken, instagram_business_id, url, caption);
+                
+                await post_reel_to_instagram(accessToken, ig_id, url, caption);
             }
             if (youtube) {
                 if (caption.length > 40) {
@@ -338,6 +344,28 @@ async function handoff(function_name, kwargs) {
 function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, temperature: 0.5}) {
     return openai.chat.completions.create({ prompt: prompt, ...kwargs }).choices[0].text;
 }
+export async function set(key, value, org_id) {
+    await db.none(
+        `INSERT INTO variables (id, value, org_id)
+        VALUES ($[id], $[value], $[org_id])
+        ON CONFLICT (id, org_id) DO UPDATE SET value = $[value]`, {
+            id: key,
+            value: value,
+            org_id: org_id,
+    });
+    return true
+}
+export async function get(key, org_id) {
+    const result = (await db.oneOrNone(
+        `SELECT value FROM variables WHERE id = $[id] AND org_id = $[org_id]`, {
+            id: key,
+            org_id: org_id,
+    }))
+    return result ? result.value : null
+}
+
+
+
 
 // openai helpers
 async function waitOnRun(threadId, runId) {
