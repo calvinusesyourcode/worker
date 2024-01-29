@@ -179,6 +179,87 @@ export function generateId(prefix, length=16) {
     const nanoid = customAlphabet("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
     return [prefix, nanoid(16)].join("_");
 }
+export async function set(key, value, org_id) {
+    await db.none(
+        `INSERT INTO variables (id, value, org_id)
+        VALUES ($[id], $[value], $[org_id])
+        ON CONFLICT (id, org_id) DO UPDATE SET value = $[value]`, {
+            id: key,
+            value: value,
+            org_id: org_id,
+    });
+    return true
+}
+export async function get(key, org_id) {
+    const result = (await db.oneOrNone(
+        `SELECT value FROM variables WHERE id = $[id] AND org_id = $[org_id]`, {
+            id: key,
+            org_id: org_id,
+    }))
+    return result ? result.value : null
+}
+
+
+
+
+// openai helpers
+async function waitOnRun(threadId, runId) {
+    let run = (await openai.beta.threads.runs.retrieve(threadId, runId))
+    while (run.status === "queued" || run.status === "in_progress") {
+        await sleep(3000);
+        run = (await openai.beta.threads.runs.retrieve(threadId, runId))
+    }
+    return run
+}
+async function listMessages(threadId) {
+    return (await openai.beta.threads.messages.list(threadId))
+}
+async function latestMessage(threadId) {
+    const messagesList = (await listMessages(threadId))["data"]
+    const messages = messagesList.sort((a, b) => a["created_at"] - b["created_at"]).map((msg) => msg["content"].map((content) => content["text"]["value"])).flat()
+    return messages[messages.length - 1]
+}
+async function createThread(messages) {
+    return (await openai.beta.threads.create({ messages: messages }))
+}
+async function startRun(threadId) {
+    return (await openai.beta.threads.runs.create(threadId, { assistant_id: process.env.OPENAI_ASSISTANT_ID }))
+}
+async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools=null, instructions=null) {
+    const run = await openai.beta.threads.createAndRun({
+        assistant_id: asst_id,
+        thread: { messages: messages },
+        model: model,
+        tools: tools,
+        instructions: instructions,
+    })
+    return run
+}
+
+
+async function supervisor() {
+    while (true) {
+        log("> checking for new jobs");
+        const jobs = await db.any("SELECT * FROM jobs WHERE status = 'pending'");
+        for (let job of jobs) {
+            await punchcard(job, "working", {
+                type: "debug",
+                tldr: `> ${job.id}`,
+                message: `working on job:: ${job.tldr}`,
+                json: {},
+            });
+            await work(job);
+        }
+        await sleep(SUPERVISOR_SLEEP);
+    }
+}
+async function logger() {
+    while (true) {
+        log("> logging records");
+        await logRecords();
+        await sleep(LOGGER_SLEEP);
+    }
+}
 async function handoff(function_name, kwargs) {
     const { job, call_id } = kwargs
     await punchcard(job, "waiting", {
@@ -349,62 +430,8 @@ async function handoff(function_name, kwargs) {
 function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, temperature: 0.5}) {
     return openai.chat.completions.create({ prompt: prompt, ...kwargs }).choices[0].text;
 }
-export async function set(key, value, org_id) {
-    await db.none(
-        `INSERT INTO variables (id, value, org_id)
-        VALUES ($[id], $[value], $[org_id])
-        ON CONFLICT (id, org_id) DO UPDATE SET value = $[value]`, {
-            id: key,
-            value: value,
-            org_id: org_id,
-    });
-    return true
-}
-export async function get(key, org_id) {
-    const result = (await db.oneOrNone(
-        `SELECT value FROM variables WHERE id = $[id] AND org_id = $[org_id]`, {
-            id: key,
-            org_id: org_id,
-    }))
-    return result ? result.value : null
-}
 
 
-
-
-// openai helpers
-async function waitOnRun(threadId, runId) {
-    let run = (await openai.beta.threads.runs.retrieve(threadId, runId))
-    while (run.status === "queued" || run.status === "in_progress") {
-        await sleep(3000);
-        run = (await openai.beta.threads.runs.retrieve(threadId, runId))
-    }
-    return run
-}
-async function listMessages(threadId) {
-    return (await openai.beta.threads.messages.list(threadId))
-}
-async function latestMessage(threadId) {
-    const messagesList = (await listMessages(threadId))["data"]
-    const messages = messagesList.sort((a, b) => a["created_at"] - b["created_at"]).map((msg) => msg["content"].map((content) => content["text"]["value"])).flat()
-    return messages[messages.length - 1]
-}
-async function createThread(messages) {
-    return (await openai.beta.threads.create({ messages: messages }))
-}
-async function startRun(threadId) {
-    return (await openai.beta.threads.runs.create(threadId, { assistant_id: process.env.OPENAI_ASSISTANT_ID }))
-}
-async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools=null, instructions=null) {
-    const run = await openai.beta.threads.createAndRun({
-        assistant_id: asst_id,
-        thread: { messages: messages },
-        model: model,
-        tools: tools,
-        instructions: instructions,
-    })
-    return run
-}
 
 /*
  *
@@ -528,63 +555,10 @@ async function main() {
     logger();
 }
 
-async function supervisor() {
-    while (true) {
-        log("> checking for new jobs");
-        const jobs = await db.any("SELECT * FROM jobs WHERE status = 'pending'");
-        for (let job of jobs) {
-            await punchcard(job, "working", {
-                type: "debug",
-                tldr: `> ${job.id}`,
-                message: `working on job:: ${job.tldr}`,
-                json: {},
-            });
-            await work(job);
-        }
-        await sleep(SUPERVISOR_SLEEP);
-    }
-}
 
-async function logger() {
-    while (true) {
-        log("> logging records");
-        await logRecords();
-        await sleep(LOGGER_SLEEP);
-    }
-}
 
 console.log(`process.argv[0]: ${process.argv[0]}`)
 console.log(`process.argv[1]: ${process.argv[1]}`)
 if (path.basename(process.argv[1]) === path.basename(__filename)) {
     main().catch(console.error);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
