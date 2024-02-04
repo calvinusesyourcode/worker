@@ -5,7 +5,9 @@ const init_time = new Date().valueOf()
 const headers = 1
 
 const header_titles = {
-  ".threads": ["init", "last_msg", "phone_number", "name", "thread_id"]
+  ".threads": ["init", "last_msg", "phone_number", "name", "thread_id"],
+  "pending-msgs": ["date", "phone_number", "name", "thread_id", "response"],
+  "msg-fixes": ["thread_id", "old_msg", "new_msg"],
 }
 
 const applog = full_sheet_setup(".applog",env("DEFAULT_SHEET_ID"))
@@ -160,16 +162,46 @@ function doPost(e) {
   if (!data.fn) {
     throw("ERROR: !data.fn")
   }
+  if (data.pass != env("PASS")) {
+    throw("ERROR: server failure 21")
+  }
 
   let date;
   if (data.date === undefined || data.date == "") {data.date = f_datetime}
   else {data.date = Utilities.formatDate(new Date(data.date), "America/Vancouver", "yyyy/MM/dd H:mm:ss")}
 
   if (data.fn == "msg_assistant") {
-    if (!data.message || !data.phone_number || !data.name) {
-      throw new Error("ERROR: !data.message OR !data.phone_number OR !data.name")
+    if (!data.direction) {
+      throw new Error("ERROR: !data.direction")
     }
-    return ContentService.createTextOutput(msg_assistant(data.sheet_id, data.message, data.phone_number, data.name))
+    const ss = full_sheet_setup('pending-msgs', data.sheet_id)
+    if (data.direction === 'in') {
+      if (!data.message || !data.phone_number || !data.name) {
+        throw new Error("ERROR: !data.message OR !data.phone_number OR !data.name")
+      }
+      const [thread_id, response] = msg_assistant(data.sheet_id, data.message, data.phone_number, data.name)
+      applog.appendRow([f_datetime, "INFO", `message`])
+      ss.appendRow([data.date, data.phone_number, data.name, thread_id, response])
+      return ContentService.createTextOutput("SUCCESS")
+    }
+    else if (data.direction === 'out') {
+      const messageData = unshift('pending-msgs', data.sheet_id)
+      if (!messageData.response || messageData.response.length < 1) {
+        return ContentService.createTextOutput("DONE")
+      }
+      return ContentService.createTextOutput(`${messageData.phone_number}::${messageData.thread_id}::${messageData.response}`)
+    }
+    else if (data.direction === 'loop') {
+      if (!data.old_msg || !data.new_msg || !data.thread_id) {
+        throw new Error("ERROR: !data.old_msg OR !data.new_msg OR !data.thread_id")
+      }
+      full_sheet_setup('msg-fixes', data.sheet_id).appendRow([data.thread_id, data.old_msg, data.new_msg])
+      return ContentService.createTextOutput("SUCCESS")
+    }
+    else if (data.direction === 'count') {
+      const count = ss.getLastRow()-1
+      return ContentService.createTextOutput(Array(count).fill(count).join("::"))
+    }
   }
 
   if (data.fn == "say_to_the_world") {
@@ -229,10 +261,22 @@ function msg_assistant(sheet_id, input_message, phone_number, name) {
   let run = wait_on_run(assistant_id, thread_id)
   const messages = get_thread_messages(thread_id).data.map((msg)=>msg.id)
   const reply = read_message(thread_id, messages[0]).content[0].text.value
-  const thread_log = sheet_setup(".thread_log",sheet_id)
+  const thread_log = sheet_setup(".thread-log",sheet_id)
   SpreadsheetApp.openById(sheet_id).getSheetByName(thread_log).appendRow([thread_id, reply])
   spend_time_typing(reply)
-  return reply
+  return [thread_id, reply]
+}
+function unshift(sheet_name, sheet_id) {
+  let keys = header_titles[sheet_name]
+  if (!keys) throw new Error("function unshift error :: !header_titles[sheet_name]")
+  const ss = full_sheet_setup(sheet_name, sheet_id)
+  for (let i = 1; i < 1000; i++) {
+    const row = ss.getRange(i,1,1,ss.getLastColumn()).getValues()[0]
+    if (row.join("") != header_titles[sheet_name].join("")) {
+      ss.deleteRow(i)
+      return row.reduce((obj, item, j) => ({ ...obj, [keys[j]]: item }), {});
+    }
+  }
 }
 function say_to_the_world(text) {
   
