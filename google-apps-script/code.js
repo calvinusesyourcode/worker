@@ -180,7 +180,6 @@ function doPost(e) {
         throw new Error("ERROR: !data.message OR !data.phone_number OR !data.name")
       }
       const [thread_id, response] = msg_assistant(data.sheet_id, data.message, data.phone_number, data.name)
-      applog.appendRow([f_datetime, "INFO", `message`])
       ss.appendRow([data.date, data.phone_number, data.name, thread_id, response])
       return ContentService.createTextOutput("SUCCESS")
     }
@@ -189,6 +188,7 @@ function doPost(e) {
       if (!messageData.response || messageData.response.length < 1) {
         return ContentService.createTextOutput("DONE")
       }
+      applog.appendRow([f_datetime, "INFO", `message_send`])
       return ContentService.createTextOutput(`${messageData.phone_number}::${messageData.thread_id}::${messageData.response}`)
     }
     else if (data.direction === 'loop') {
@@ -196,11 +196,12 @@ function doPost(e) {
         throw new Error("ERROR: !data.old_msg OR !data.new_msg OR !data.thread_id")
       }
       full_sheet_setup('msg-fixes', data.sheet_id).appendRow([data.thread_id, data.old_msg, data.new_msg])
+      applog.appendRow([f_datetime, "INFO", `message_edit`])
       return ContentService.createTextOutput("SUCCESS")
     }
     else if (data.direction === 'count') {
       const count = ss.getLastRow()-1
-      return ContentService.createTextOutput(Array(count).fill(count).join("::"))
+      return ContentService.createTextOutput(count == 0 ? "NONE" : Array(count).fill(count).join("::"))
     }
   }
 
