@@ -11,11 +11,9 @@ import {
 
 
 
-// export async function main() {
+const obj = {
+    key: "value",
+    key2: "value2",
+}
 
-//     await db.none(
-//         `INSERT INTO orgs ()`
-//     )
-
-//     await set('test', 'test', 'saturn');
-// }
+console.log(Object.entries(obj).map(([k, v]) => `${k}=${v}`).join('&'));

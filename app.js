@@ -6,11 +6,12 @@ import util from 'util';
 import url from 'url';
 import child_process from 'child_process';
 import dotenv from 'dotenv';
-import pg from "pg";
+import pg from 'pg';
 import pgPromise from 'pg-promise';
 import csv from 'fast-csv';
-import { customAlphabet } from "nanoid";
-import OpenAI from "openai";
+import { customAlphabet } from 'nanoid';
+import OpenAI from 'openai';
+import chalk from 'chalk';
 
 const __filename = url.fileURLToPath(new URL(import.meta.url));
 const __dirname = path.dirname(__filename);
@@ -53,7 +54,7 @@ dotenv.config();
 const test = true;
 let pause = false;
 
-const SUPERVISOR_SLEEP = 1000*60;
+const SUPERVISOR_SLEEP = 1000*10;
 const LOGGER_SLEEP = 1000*60*60*2;
 const MANAGER_SLEEP = 1000*60*30;
 
@@ -120,8 +121,8 @@ const data = {
 
 // sql helpers
 export async function punchcard(job, new_status, { type, tldr, message, json }) {
-    log(`PUNCH :: ${job.id} :: ${job.status} => ${new_status} :: ${tldr} :: ${message} :: ${JSON.stringify(json)}`)
-    const record_id = generateId("txt");
+    log('info', `PUNCH :: ${job.id} :: ${job.status} => ${new_status} :: ${tldr} :: ${message} :: ${JSON.stringify(json)}`)
+    const record_id = generateId('txt');
     await db.tx(async t => {
         await t.none(
             `INSERT INTO records (id, datetime, type, tldr, message, json, job_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
@@ -136,26 +137,75 @@ export async function punchcard(job, new_status, { type, tldr, message, json }) 
     });
     return record_id;
 }
+export async function punch(job, new_status, level, message) {
+    log(level, `PUNCH :: ${job.id} :: ${job.status} => ${new_status} :: ${message}`)
+    await db.tx(async t => {
+
+        await t.none(
+            `INSERT INTO records (id, datetime, type, message, job_id)
+            VALUES ($[id], $[datetime], $[type], $[message], $[job_id])`, {
+                id: generateId('txt'),
+                datetime: Date.now(),
+                type: level,
+                message: message,
+                job_id: job.id
+        });
+
+        await t.none(
+            `INSERT INTO records (id, datetime, type, message, job_id)
+            VALUES ($1, $2, $3, $4, $5)`, [
+                generateId('txt'),
+                Date.now(),
+                level,
+                message,
+                job.id
+        ]);
+
+        await t.none(`INSERT INTO records (id, datetime, type, message, job_id)
+            VALUES ($1, $2, $3, $4, $5)`, [generateId('txt'), Date.now(), level, message, job.id]
+        );
+
+
+
+
+        if (new_status) {
+            await t.none(
+                `UPDATE jobs SET status = $1 WHERE id = $2`,
+                [new_status, job.id]
+            );
+        };
+    });
+    return record_id;
+}
+
 
 
 
 
 // helpers
-function log(message) {
-    console.log(message);
+function log(level, message) {
+    const colors = {
+        debug: 'white',
+        info: 'blue',
+        error: 'red',
+        success: 'green',
+        warning: 'yellow',
+    }
+    const colorFunction = chalk[colors[level] || level] || chalk.white;
+    console.log(colorFunction(message));
 }
 async function logRecords() {
     const records = (await db.any('SELECT * FROM records'));
     for (let record of records) {
         for (let key in record) {
-            if (typeof record[key] === "object") {
+            if (typeof record[key] === 'object') {
                 record[key] = JSON.stringify(record[key]);
             }
         }
     }
     
     const csvStream = csv.format({ headers: true });
-    const writableStream = fs.createWriteStream("records.csv");
+    const writableStream = fs.createWriteStream('records.csv');
 
     csvStream.pipe(writableStream);
     records.forEach(record => csvStream.write(record));
@@ -166,15 +216,15 @@ function sleep(ms) {
 }
 // TODO: replace
 // function addJob(tldr) {
-//     data["jobs"].push({
-//         id: generateId("job"),
+//     data['jobs'].push({
+//         id: generateId('job'),
 //         tldr: tldr,
-//         status: "pending",
+//         status: 'pending',
 //     });
 // }
 export function generateId(prefix, length=16) {
-    const nanoid = customAlphabet("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz");
-    return [prefix, nanoid(16)].join("_");
+    const nanoid = customAlphabet('123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz');
+    return [prefix, nanoid(16)].join('_');
 }
 export async function set(key, value, org_id) {
     await db.none(
@@ -202,7 +252,7 @@ export async function get(key, org_id) {
 // openai helpers
 async function waitOnRun(threadId, runId) {
     let run = (await openai.beta.threads.runs.retrieve(threadId, runId))
-    while (run.status === "queued" || run.status === "in_progress") {
+    while (run.status === 'queued' || run.status === 'in_progress') {
         await sleep(3000);
         run = (await openai.beta.threads.runs.retrieve(threadId, runId))
     }
@@ -212,8 +262,8 @@ async function listMessages(threadId) {
     return (await openai.beta.threads.messages.list(threadId))
 }
 async function latestMessage(threadId) {
-    const messagesList = (await listMessages(threadId))["data"]
-    const messages = messagesList.sort((a, b) => a["created_at"] - b["created_at"]).map((msg) => msg["content"].map((content) => content["text"]["value"])).flat()
+    const messagesList = (await listMessages(threadId))['data']
+    const messages = messagesList.sort((a, b) => a['created_at'] - b['created_at']).map((msg) => msg['content'].map((content) => content['text']['value'])).flat()
     return messages[messages.length - 1]
 }
 async function createThread(messages) {
@@ -222,7 +272,7 @@ async function createThread(messages) {
 async function startRun(threadId) {
     return (await openai.beta.threads.runs.create(threadId, { assistant_id: process.env.OPENAI_ASSISTANT_ID }))
 }
-async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools=null, instructions=null) {
+async function createAndRun(messages, asst_id, model='gpt-4-1106-preview', tools=null, instructions=null) {
     const run = await openai.beta.threads.createAndRun({
         assistant_id: asst_id,
         thread: { messages: messages },
@@ -239,36 +289,36 @@ async function createAndRun(messages, asst_id, model="gpt-4-1106-preview", tools
 
 async function supervisor() {
     while (true) {
-        log("> checking for pending jobs");
+        log('debug', '> checking for pending jobs');
         for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'pending'"))) {
-            await punchcard(job, "working", {
-                type: "debug",
+            await punchcard(job, 'working', {
+                type: 'debug',
                 tldr: `> ${job.id}`,
                 message: `starting job :: ${job.tldr}`,
                 json: {},
             });
-            job.status = "working";
-            setTimeout(async () => await work(job), 100);
+            job.status = 'working';
+            setTimeout(async () => log('info', await work(job)), 100);
         }
         await sleep(SUPERVISOR_SLEEP);
     }
 }
 async function manager() {
     while (true) {
-        log("> checking for scheduled jobs");
+        log('debug', '> checking for scheduled jobs');
         for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'scheduled' AND start_time > $1 AND start_time < $2", [Date.now()/1000 - MANAGER_SLEEP, Date.now()/1000 + MANAGER_SLEEP]))) {
             const wait = job.start_time - Date.now()/1000;
-            await punchcard(job, "queued", {
-                type: "debug",
+            await punchcard(job, 'queued', {
+                type: 'debug',
                 tldr: `${job.tldr}`,
                 message: ``,
                 json: {},
             });
-            job.status = "queued";
+            job.status = 'queued';
             console.log(`> starting ${job.id} in ${Math.floor(wait)} seconds`);
             setTimeout(async () => {
-                await punchcard(job, "pending", {
-                    type: "debug",
+                await punchcard(job, 'pending', {
+                    type: 'debug',
                     tldr: `${job.tldr}`,
                     message: ``,
                     json: {},
@@ -280,54 +330,35 @@ async function manager() {
 }
 async function logger() {
     while (true) {
-        log("> logging records");
+        log('debug', '> logging records');
         await logRecords();
         await sleep(LOGGER_SLEEP);
     }
 }
-async function handoff(function_name, kwargs) {
+async function specialist(function_name, kwargs) {
     const { job, call_id } = kwargs
-    await punchcard(job, "waiting", {
-        type: "debug",
+    await punchcard(job, 'waiting', {
+        type: 'debug',
         tldr: `${job.id} => ${call_id}`,
         message: `${function_name}`,
         json: {},
     });
-    // const args = JSON.parse(call.function.arguments)
-    //                 switch (call.function.name) {
-        //                     case "create_video":
-        //                         const { project, prompt } = JSON.parse(call.function.arguments)
-        //                             // TODO: add retrying
-        //                             return
-        //                         }
-        //                         await punchcard(job, null, {
-            //                             type: "progress",
-            //                             tldr: `> ${call.function.name}`,
-            //                             message: `${project} :: ${prompt}`,
-        //                             json: {},
-        //                         });
     switch (function_name) {
 
-        case "create_video":
+        case 'create_video':
 
-            const pythonFile = "C:/Users/calvi/3D Objects/pipe/main.py";
+            const pythonFile = 'C:/Users/calvi/3D Objects/pipe/main.py';
             const { project, prompt } = kwargs;
 
             if (!project || !prompt) {
                 await punchcard(job, null, {
-                    type: "error",
+                    type: 'error',
                     tldr: `${function_name} failed`,
-                    message: `missing ${(!project && !prompt) ? "both args" ? project : "project" : "prompt" } for ${call.function.name}`,
+                    message: `missing ${(!project && !prompt) ? 'both args' ? project : 'project' : 'prompt' } for ${call.function.name}`,
                     json: {},
                 });
                 return;
             }
-            // await db.any(
-            //     `INSERT INTO jobs (id, tldr, status, parent_id) VALUES ($1, $2, $3, $4)`,
-            //     [generateId("job"), `create video for ${project} :: ${prompt}`, "pending", job.id]
-            // );
-
-
             let videoPath;
             try {
                 const { stdout, stderr } = await exec(
@@ -335,9 +366,9 @@ async function handoff(function_name, kwargs) {
                     {cwd: path.dirname(pythonFile), stdio: 'inherit'}
                 );
                 
-                if (stdout.includes("OUTPUT==")) {
-                    console.log("OUTPUT FOUND");
-                    videoPath = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
+                if (stdout.includes('OUTPUT==')) {
+                    console.log('OUTPUT FOUND');
+                    videoPath = stdout.split('OUTPUT==')[1].split('==OUTPUT')[0].trim();
                 }
 
             } catch (error) {
@@ -376,26 +407,24 @@ async function handoff(function_name, kwargs) {
             }
             if (instagram) {
 
-                let accessToken = await get("instagram_access_token", "upnorth");
-                let ig_id = await get("instagram_business_account_id", "upnorth");
+                let accessToken = await get('instagram_access_token', 'upnorth');
+                let ig_id = await get('instagram_business_account_id', 'upnorth');
                 
                 if (!accessToken || !(await is_ig_access_token_valid(accessToken))) {
                     
                     try {
-                        const pythonFile = "C:/Users/calvi/3D Objects/gui/main.py"
+                        const pythonFile = 'C:/Users/calvi/3D Objects/gui/main.py'
                         const { stdout, stderr } = await exec(
                             `python "${pythonFile}"`,
                             {cwd: path.dirname(pythonFile), stdio: 'inherit'}
                         );
-                        if (stdout.includes("OUTPUT==")) {
-                            console.log("OUTPUT FOUND");
-                            accessToken = stdout.split("OUTPUT==")[1].split("==OUTPUT")[0].trim();
-                        }
+                        if (!stdout.includes('OUTPUT==')) throw new Error('python script did not return an access token')
+                        accessToken = stdout.split('OUTPUT==')[1].split('==OUTPUT')[0].trim();
 
                     } catch (error) {
-                        console.error(error);
+                        log('error', error);
                         await punchcard(job, null, {
-                            type: "error",
+                            type: 'error',
                             tldr: `${function_name} failed`,
                             message: `error running ${pythonFile}: ${error}`,
                             json: {},
@@ -409,14 +438,14 @@ async function handoff(function_name, kwargs) {
                 if (caption.length > 40) {
                     caption = one_shot(
                         `Return this caption "${caption}" modified to be less than 40 characters. NOTHING ELSE. NO EXTRA SYNTAX. JUST THE UPDATED CAPTION.`,
-                        {model: "gpt-4-1106-preview", max_tokens: 30, temperature: 0.5}
+                        {model: 'gpt-4-1106-preview', max_tokens: 30, temperature: 0.5}
                     )
                 }
                 try {
                     fetch(
                         `https://script.google.com/macros/s/${process.env.GSCRIPT_ENDPOINT}/exec`,
                         {
-                            method: "POST",
+                            method: 'POST',
                             body: JSON.stringify({
                                 video_url: url,
                                 short_description: caption,
@@ -426,7 +455,7 @@ async function handoff(function_name, kwargs) {
                 } catch (error) {
                     console.error(error);
                     await punchcard(job, null, {
-                        type: "error",
+                        type: 'error',
                         tldr: `${function_name} failed`,
                         message: `error posting to youtube: ${error}`,
                         json: {},
@@ -438,7 +467,7 @@ async function handoff(function_name, kwargs) {
         
         default:
             await punchcard(job, null, {
-                type: "error",
+                type: 'error',
                 tldr: `${function_name} failed`,
                 message: `function ${function_name} not found`,
                 json: {},
@@ -446,13 +475,13 @@ async function handoff(function_name, kwargs) {
             return;
     }
     await punchcard(job, null, {
-        type: "debug",
+        type: 'debug',
         tldr: `${function_name} completed`,
         message: `of ${job.id} => ${call_id}`,
         json: {},
     });
 }
-function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, temperature: 0.5}) {
+function one_shot(prompt, kwargs={model: 'gpt-4-1106-preview', max_tokens: 64, temperature: 0.5}) {
     return openai.chat.completions.create({ prompt: prompt, ...kwargs }).choices[0].text;
 }
 
@@ -482,9 +511,12 @@ function one_shot(prompt, kwargs={model: "gpt-4-1106-preview", max_tokens: 64, t
 async function work(job) {
 
 
-    if (job.tldr.includes(process.env.JOB_SPECIAL_PREFIX)) {
-        job.tldr = job.tldr.replace(process.env.JOB_SPECIAL_PREFIX, "")
-        
+    if (job.tldr.includes(process.env.JOB_SPECIAL_PREFIX) && job.tldr.length < 1000) {
+        job.tldr = job.tldr.replace(process.env.JOB_SPECIAL_PREFIX, '')
+        const [function_name, ...args] = job.tldr.split('?')
+        log('info', JSON.stringify({job, call_id: job.id, ...Object.fromEntries(args.map((arg) => arg.split('=')))}))
+        // await specialist(function_name, {job, call_id: job.id, ...Object.fromEntries(args.map((arg) => arg.split('=')))})
+        return 'JOB COMPLETE'
     }
 
 
@@ -514,18 +546,18 @@ async function work(job) {
         `))
         .map((row, i) => `${i}. ${row.id} (${row.tldr})`)
 
-    let prompt = ""
+    let prompt = ''
     prompt += `# Current job:\n${job.tldr}\n\n`
-    prompt += `${ history.length > 0 ? `# Job history:\n${history.join("\n")}\n\n` : "" }`
-    prompt += `${ goals.length > 0 ? `# Overarching goals:\n${goals.join("\n")}\n\n` : "" }`
-    prompt += `${ actions.length > 0 ? `# Actions:\n${actions.join("\n")}\n\n` : "" }`
+    prompt += `${ history.length > 0 ? `# Job history:\n${history.join('\n')}\n\n` : '' }`
+    prompt += `${ goals.length > 0 ? `# Overarching goals:\n${goals.join('\n')}\n\n` : '' }`
+    prompt += `${ actions.length > 0 ? `# Actions:\n${actions.join('\n')}\n\n` : '' }`
     prompt += `# Return value:\n`
     prompt += `Call a function or brainstorm\n`
 
     let run = (await createAndRun(
-        [{ role: "user", content: prompt }],
-        "asst_rhmXsyeXVrfisVnu34zd2AsD",
-        "gpt-4-1106-preview",
+        [{ role: 'user', content: prompt }],
+        'asst_rhmXsyeXVrfisVnu34zd2AsD',
+        'gpt-4-1106-preview',
         utilities,
     ))
 
@@ -534,29 +566,30 @@ async function work(job) {
 
     console.log(threadId)
     run = await waitOnRun(threadId, runId)
-    log(`>>> ${run.id} finished with status ${run.status}`)
-    if (run.status == "requires_action") {
-        console.log(">> requires action")
+    log('debug', `>>> ${run.id} finished with status ${run.status}`)
+    if (run.status == 'requires_action') {
         for (let call of run.required_action.submit_tool_outputs.tool_calls) {
-            console.log(`>> ${call.id}`)
-            console.log(JSON.stringify(call, null, 2))
-            if (call.type == "function") {
-                console.log(`calling ${call.function.name}`)
-                await handoff(call.function.name, {
-                    ...JSON.parse(call.function.arguments),
-                    job: job,
-                    call_id: call.id
+            if (call.type == 'function') {
+                log('debug', `>>> calling ${call.function.name}`)
+                work({
+                    id: job.id,
+                    tldr: `${process.env.JOB_SPECIAL_PREFIX}${call.function.name}?${Object.entries({...JSON.parse(call.function.arguments)}).map(([k, v]) => `${k}=${v}`).join('&')}`,
+                    status: 'working',
+                    parent_id: job.id,
+                    project_id: job.project_id || null,
+                    org_id: job.org_id || null,
                 })
+                return 'JOB COMPLETE'
             }
         }
     }
 
-    let reply = await latestMessage(threadId)
-    console.log(reply)
-    const messagesList = (await listMessages(threadId))["data"]
-    for (let message of messagesList) {
-        console.log(message.content)
-    }
+    // let reply = await latestMessage(threadId)
+    // console.log(reply)
+    // const messagesList = (await listMessages(threadId))['data']
+    // for (let message of messagesList) {
+    //     console.log(message.content)
+    // }
     return
 }
 

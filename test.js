@@ -39,7 +39,7 @@ await db.none(
         status: "scheduled",
         org_id: "upnorth",
         project_id: "content",
-        start_time: Date.now()/1000 + 10,
+        start_time: Date.now()/1000 + 5,
     });
     console.log("4")
 
