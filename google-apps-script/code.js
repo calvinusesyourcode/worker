@@ -10,14 +10,27 @@ const header_titles = {
   "msg-fixes": ["thread_id", "old_msg", "new_msg"],
 }
 
+const ignored_prefixes = [
+  `​❤️​ to “`,
+  `👍​ to “`,
+]
+
 const applog = full_sheet_setup(".applog",env("DEFAULT_SHEET_ID"))
 
-
-
-function testt1t1() {
-  Logger.log(refresh_twitter_token())
+function temptest(){
+  const id = "thread_c4ItLrqYLHhqjFCLUEfYrDxB"
+  const t = full_sheet_setup(id.replace('_','-'), env('DEFAULT_SHEET_ID'))
+  let rows = get_thread_messages(id).data
+    .sort((a,b) => a.created_at < b.created_at ? -1 : 1)
+    .map((item) => {return {
+      time: Utilities.formatDate(new Date(item.created_at*1000), "America/Vancouver", "yyyy/MM/dd H:mm:ss"),
+      from: item.role,
+      msg: item.content[0].text.value
+    }})
+    .map((item) => {return Object.values(item)})
+  // Logger.log(JSON.stringify(data, null, 4))
+  rows.forEach(row => t.appendRow(row))
 }
-
 
 // main
 function doGet(e) {
@@ -165,7 +178,7 @@ function doPost(e) {
   if (data.pass != env("PASS")) {
     throw("ERROR: server failure 21")
   }
-
+  applog.appendRow([f_datetime, "INFO", JSON.stringify(data, null, 4)])
   let date;
   if (data.date === undefined || data.date == "") {data.date = f_datetime}
   else {data.date = Utilities.formatDate(new Date(data.date), "America/Vancouver", "yyyy/MM/dd H:mm:ss")}
@@ -179,19 +192,41 @@ function doPost(e) {
       if (!data.message || !data.phone_number || !data.name) {
         throw new Error("ERROR: !data.message OR !data.phone_number OR !data.name")
       }
+      if (ignored_prefixes.some(prefix => data.message.slice(0,14).includes(prefix))) {
+        applog.appendRow([f_datetime, "INFO", `message_send (in)`])
+        applog.appendRow([f_datetime, "INFO", "IGNORED MSG REACTION"])
+        return ContentService.createTextOutput("SUCCESS")
+      }
       const [thread_id, response] = msg_assistant(data.sheet_id, data.message, data.phone_number, data.name)
       ss.appendRow([data.date, data.phone_number, data.name, thread_id, response])
+      applog.appendRow([f_datetime, "INFO", `message_send (in)`])
+      applog.appendRow([f_datetime, "INFO", "SUCCESS"])
       return ContentService.createTextOutput("SUCCESS")
+    }
+    else if (data.direction === 'inandout') {
+      if (!data.message || !data.phone_number || !data.name) {
+        throw new Error("ERROR: !data.message OR !data.phone_number OR !data.name")
+      }
+      if (ignored_prefixes.some(prefix => data.message.slice(0,14).includes(prefix))) {
+        applog.appendRow([f_datetime, "INFO", `message_send (inandout)`])
+        applog.appendRow([f_datetime, "INFO", "IGNORED MSG REACTION"])
+        return ContentService.createTextOutput("<TODO: fix>")
+      }
+      const [thread_id, response] = msg_assistant(data.sheet_id, data.message, data.phone_number, data.name)
+      applog.appendRow([f_datetime, "INFO", `message_send (inandout)`])
+      applog.appendRow([f_datetime, "INFO", `${data.phone_number}::${thread_id}::${response}`])
+      return ContentService.createTextOutput(`${data.phone_number}::${thread_id}::${response}`)
     }
     else if (data.direction === 'out') {
       const messageData = unshift('pending-msgs', data.sheet_id)
       if (!messageData.response || messageData.response.length < 1) {
         return ContentService.createTextOutput("DONE")
       }
-      applog.appendRow([f_datetime, "INFO", `message_send`])
+      applog.appendRow([f_datetime, "INFO", `message_send (out)`])
+        applog.appendRow([f_datetime, "INFO", `${messageData.phone_number}::${messageData.thread_id}::${messageData.response}`])
       return ContentService.createTextOutput(`${messageData.phone_number}::${messageData.thread_id}::${messageData.response}`)
     }
-    else if (data.direction === 'loop') {
+    else if (data.direction === 'edit') {
       if (!data.old_msg || !data.new_msg || !data.thread_id) {
         throw new Error("ERROR: !data.old_msg OR !data.new_msg OR !data.thread_id")
       }
@@ -262,7 +297,7 @@ function msg_assistant(sheet_id, input_message, phone_number, name) {
   let run = wait_on_run(assistant_id, thread_id)
   const messages = get_thread_messages(thread_id).data.map((msg)=>msg.id)
   const reply = read_message(thread_id, messages[0]).content[0].text.value
-  const thread_log = sheet_setup(".thread-log",sheet_id)
+  const thread_log = sheet_setup(".thread_log",sheet_id)
   SpreadsheetApp.openById(sheet_id).getSheetByName(thread_log).appendRow([thread_id, reply])
   spend_time_typing(reply)
   return [thread_id, reply]
