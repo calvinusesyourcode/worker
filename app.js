@@ -288,7 +288,7 @@ async function createAndRun(messages, asst_id, model='gpt-4-1106-preview', tools
 
 
 async function supervisor() {
-    while (true) {
+    setInterval(async () => {
         log('debug', '> checking for pending jobs');
         for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'pending'"))) {
             await punchcard(job, 'working', {
@@ -300,11 +300,10 @@ async function supervisor() {
             job.status = 'working';
             setTimeout(async () => log('info', await work(job)), 100);
         }
-        await sleep(SUPERVISOR_SLEEP);
-    }
+    }, SUPERVISOR_SLEEP);
 }
 async function manager() {
-    while (true) {
+    setInterval(async () => {
         log('debug', '> checking for scheduled jobs');
         for (let job of (await db.any("SELECT * FROM jobs WHERE status = 'scheduled' AND start_time > $1 AND start_time < $2", [Date.now()/1000 - MANAGER_SLEEP, Date.now()/1000 + MANAGER_SLEEP]))) {
             const wait = job.start_time - Date.now()/1000;
@@ -325,15 +324,13 @@ async function manager() {
                 });
             }, wait*1000);
         }
-        await sleep(MANAGER_SLEEP);
-    }
+    }, MANAGER_SLEEP);
 }
 async function logger() {
-    while (true) {
+    setInterval(async () => {
         log('debug', '> logging records');
         await logRecords();
-        await sleep(LOGGER_SLEEP);
-    }
+    }, LOGGER_SLEEP);
 }
 async function specialist(function_name, kwargs) {
     const { job, call_id } = kwargs
