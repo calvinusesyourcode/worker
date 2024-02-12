@@ -12,11 +12,14 @@ import csv from 'fast-csv';
 import { customAlphabet } from 'nanoid';
 import OpenAI from 'openai';
 import chalk from 'chalk';
+import express from 'express';
+dotenv.config();
 
 const __filename = url.fileURLToPath(new URL(import.meta.url));
 const __dirname = path.dirname(__filename);
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
 export const exec = util.promisify(child_process.exec);
+
 
 import { jumpToCloud } from './_firebase.js';
 import { post_reel_to_instagram } from './_facebook.js';
@@ -50,7 +53,6 @@ import { post_reel_to_instagram } from './_facebook.js';
 * 
 */
 
-dotenv.config();
 const test = true;
 let pause = false;
 
@@ -590,39 +592,28 @@ async function work(job) {
     return
 }
 
-/*
- *
- *                                           .::                      .::       .::                                .::  
- *                     .::           .:      .::                     .::        .::                                 .:: 
- *    .::     .:::     .::                   .::        .::         .::       .:.: .:.: .:::.::  .::   .::           .::
- *     .::  :  .::     .: .:        .::      .::      .:   .::      .::         .::   .::   .::  .:: .:   .::        .::
- *     .:: .:  .::     .::  .::     .::      .::     .::::: .::     .::         .::   .::   .::  .::.::::: .::       .::
- *     .: .: .:.::     .:   .::     .::      .::     .:              .::        .::   .::   .::  .::.:              .:: 
- *    .:::    .:::     .::  .::     .::     .:::       .::::          .::        .:: .:::     .::.::  .::::        .::  
- *                                     
- * 
- *      Like breathing, some processes are continuous.
- *      
- *      Ebb and flow with the tides of time. Ride the waves.
- *
- *
- *
- */
-async function main() {
+
+console.log(`process.argv[0]: ${process.argv[0]}`)
+console.log(`process.argv[1]: ${process.argv[1]}`)
+if (path.basename(process.argv[1]) === path.basename(__filename)) {
     supervisor();
     manager();
     logger();
 }
 
+const app = express();
+app.set('view engine', 'ejs')
+app.use(express.static('public'))
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+app.get('/', (req, res) => {
+    res.render('index', {
+        ...(req.query.audioPath ? {audioPath: req.query.audioPath} : {}),
+        ...(req.query.videoPath ? {videoPath: req.query.videoPath} : {}),
+    })
+})
+const PORT = process.env.PORT || 3009
+app.listen(PORT, () => {
+    console.log(`listening on port ${PORT}`)
+})
 
-
-
-
-
-
-
-console.log(`process.argv[0]: ${process.argv[0]}`)
-console.log(`process.argv[1]: ${process.argv[1]}`)
-if (path.basename(process.argv[1]) === path.basename(__filename)) {
-    main().catch(console.error);
-}
