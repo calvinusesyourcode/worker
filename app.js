@@ -481,7 +481,7 @@ async function specialist(function_name, kwargs) {
     });
 }
 function one_shot(prompt, kwargs={model: 'gpt-4-1106-preview', max_tokens: 64, temperature: 0.5}) {
-    return openai.chat.completions.create({ prompt: prompt, ...kwargs }).choices[0].text;
+    return openai.chat.completions.create({ messages:[{content: prompt, role: 'user'}], ...kwargs }).then((result) => result.choices[0].message.content);
 }
 
 
@@ -604,14 +604,36 @@ if (path.basename(process.argv[1]) === path.basename(__filename)) {
 const app = express();
 app.set('view engine', 'ejs')
 app.use(express.static('public'))
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
-app.get('/', (req, res) => {
-    res.render('index', {
-        ...(req.query.audioPath ? {audioPath: req.query.audioPath} : {}),
-        ...(req.query.videoPath ? {videoPath: req.query.videoPath} : {}),
-    })
+// app.use(express.json())
+// app.use(express.urlencoded({ extended: true }))
+import gTTS from 'gtts';
+app.get('/', async (req, res) => {
+    const text = JSON.stringify(await one_shot('Return a crazy monologue that gets increasingly dystopian about china taking over. Be hyperbolic. Be dramatic. Say things like, "China is coming! Run!"', {model: 'gpt-4-1106-preview', max_tokens: 200, temperature: 0.5}))
+    const gtts = new gTTS(text, 'en');
+    const audioPath = `speech____${Math.floor(Date.now()/1000)}.mp3`
+    console.log(audioPath)
+
+    try {
+        await new Promise((resolve, reject) => {
+            gtts.save(path.join('public', audioPath), (error) => {
+                if (error) {
+                    console.error(error);
+                    reject(error);
+                } else {
+                    console.log("Text to speech converted!");
+                    resolve();
+                }
+            });
+        });
+
+        res.render('index', {
+            audioPath: audioPath,
+        });
+    } catch (error) {
+        res.status(500).send("Failed to convert text to speech.");
+    }
 })
+
 const PORT = process.env.PORT || 3009
 app.listen(PORT, () => {
     console.log(`listening on port ${PORT}`)
