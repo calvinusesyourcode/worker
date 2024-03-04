@@ -1,0 +1,4 @@
+Starting the program
+No file path provided. Exiting.
+Starting the program
+Playing WAV file

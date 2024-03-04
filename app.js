@@ -601,41 +601,49 @@ if (path.basename(process.argv[1]) === path.basename(__filename)) {
     logger();
 }
 
-const app = express();
-app.set('view engine', 'ejs')
-app.use(express.static('public'))
-// app.use(express.json())
-// app.use(express.urlencoded({ extended: true }))
-import gTTS from 'gtts';
-app.get('/', async (req, res) => {
-    const text = JSON.stringify(await one_shot('Return a crazy monologue that gets increasingly dystopian about china taking over. Be hyperbolic. Be dramatic. Say things like, "China is coming! Run!"', {model: 'gpt-4-1106-preview', max_tokens: 200, temperature: 0.5}))
-    const gtts = new gTTS(text, 'en');
-    const audioPath = `speech____${Math.floor(Date.now()/1000)}.mp3`
-    console.log(audioPath)
+if (process.argv.length > 2 && process.argv[2] === 'test') {
+    const pythonPath = 'C:/Users/calvi/3D Objects/pipe/main.py';
+    exec(`python "${pythonPath}" "`),
+        {cwd: path.dirname(pythonPath), stdio: 'inherit'}
+}
 
-    try {
-        await new Promise((resolve, reject) => {
-            gtts.save(path.join('public', audioPath), (error) => {
-                if (error) {
-                    console.error(error);
-                    reject(error);
-                } else {
-                    console.log("Text to speech converted!");
-                    resolve();
-                }
-            });
-        });
 
-        res.render('index', {
-            audioPath: audioPath,
-        });
-    } catch (error) {
-        res.status(500).send("Failed to convert text to speech.");
-    }
-})
 
-const PORT = process.env.PORT || 3009
-app.listen(PORT, () => {
-    console.log(`listening on port ${PORT}`)
-})
+// const app = express();
+// app.set('view engine', 'ejs')
+// app.use(express.static('public'))
+// // app.use(express.json())
+// // app.use(express.urlencoded({ extended: true }))
+// import gTTS from 'gtts';
+// app.get('/', async (req, res) => {
+//     const text = JSON.stringify(await one_shot('Return a crazy monologue that gets increasingly dystopian about china taking over. Be hyperbolic. Be dramatic. Say things like, "China is coming! Run!"', {model: 'gpt-4-1106-preview', max_tokens: 200, temperature: 0.5}))
+//     const gtts = new gTTS(text, 'en');
+//     const audioPath = `speech____${Math.floor(Date.now()/1000)}.mp3`
+//     console.log(audioPath)
+
+//     try {
+//         await new Promise((resolve, reject) => {
+//             gtts.save(path.join('public', audioPath), (error) => {
+//                 if (error) {
+//                     console.error(error);
+//                     reject(error);
+//                 } else {
+//                     console.log("Text to speech converted!");
+//                     resolve();
+//                 }
+//             });
+//         });
+
+//         res.render('index', {
+//             audioPath: audioPath,
+//         });
+//     } catch (error) {
+//         res.status(500).send("Failed to convert text to speech.");
+//     }
+// })
+
+// const PORT = process.env.PORT || 3009
+// app.listen(PORT, () => {
+//     console.log(`listening on port ${PORT}`)
+// })
 
